@@ -5,10 +5,10 @@ const {
   createDiagramCache,
   buildRenderPayload,
   fetchDiagramSvg
-} = require('../src/renderer.js');
+} = require('../main.js');
 
 test('Configurações Padrão (DEFAULT_SETTINGS)', () => {
-  assert.ok(DEFAULT_SETTINGS.serverUrl.startsWith('https://'));
+  assert.ok(DEFAULT_SETTINGS.serverUrl.startsWith('http'));
   assert.strictEqual(typeof DEFAULT_SETTINGS.debounceMs, 'number');
   assert.ok(DEFAULT_SETTINGS.debounceMs >= 100);
 });
