@@ -11,10 +11,14 @@ O **joaju-obsidian** fecha o elo de **paridade total (WYSIWYG)**: o mesmo diagra
 - **🧬 Kinship Clínico (`kinship`, `kinship2`, `heredograma`, `pedigree`):** Renderiza heredogramas genealógicos completos segundo o padrão Bennett 2008 (`kinship2` em R).
 - **📐 D2 Declarativo (`d2`):** Diagramação moderna de fluxos, arquiteturas e tabelas SQL com layout de alta legibilidade.
 - **🏗️ PlantUML (`plantuml`, `puml`):** Diagramas formais de sequência, classes, estados, atividades e cronogramas.
+- **📄 Compilação Nativa de Artigos (PDF):** Envia a nota Markdown atual para compilação no Joaju e salva o PDF resultante diretamente na mesma pasta da nota.
+- **🦊 Integração com Fuxico (Pastebin):**
+  - **Compilar & Fuxicar PDF:** Compila o PDF e faz upload imediato para o Fuxico (`https://2lp.in`), adicionando o link (`fuxico_pdf`) e a tag `fuxico` ao frontmatter, com a URL copiada para a área de transferência.
+  - **Fuxicar Markdown:** Publica o arquivo Markdown bruto no Fuxico, registrando `fuxico_md` e tag `fuxico` no frontmatter.
 - **⚡ Cache em Memória LRU:** Re-renderização a 0ms ao rolar ou alternar notas.
 - **⏳ Debounce Configurável:** Digite suavemente sem travar o editor nem sobrecarregar o servidor.
 - **🛡️ Tratamento Gracioso de Erros:** Avisos discretos inline caso haja erro de sintaxe, sem quebrar o layout da nota.
-- **🔒 Soberania de Dados:** Conecta diretamente ao seu servidor Joaju (`https://joaju.lumen.pink` ou `http://localhost:3000`).
+- **🔒 Soberania de Dados:** Conecta diretamente aos seus servidores Joaju e Fuxico.
 
 ---
 
@@ -37,8 +41,20 @@ git clone https://codeberg.org/lumenpink/joaju-obsidian.git
 
 Acesse **Configurações > Joaju Live Preview**:
 
-* **Servidor Joaju (URL):** Endereço da API Joaju (padrão: `https://joaju.lumen.pink`). Para desenvolvimento offline local, configure para `http://localhost:3000`.
+* **Servidor Joaju (URL):** Endereço da API Joaju (padrão: `http://baquara:3000`).
 * **Debounce (ms):** Tempo de espera (padrão: `400ms`) após a última tecla digitada antes de disparar a compilação do diagrama.
+* **Servidor Fuxico (URL):** Instância Fuxico para publicação (padrão: `https://2lp.in`).
+* **Token de Autenticação Fuxico:** Chave de API Bearer para envio de arquivos.
+
+---
+
+## ⌨️ Comandos Disponíveis
+
+Pela paleta de comandos (`Ctrl+P` / `Cmd+P`) ou ícone da barra lateral (ribbon):
+
+1. **Joaju: Compilar nota atual para PDF**
+2. **Joaju: Compilar e publicar PDF no Fuxico**
+3. **Joaju: Publicar Markdown no Fuxico**
 
 ---
 

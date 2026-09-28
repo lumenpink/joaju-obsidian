@@ -132,3 +132,52 @@ test('Cliente HTTP (fetchDiagramSvg) - Falha de conexão de rede', async () => {
     /Falha de conexão com o servidor Joaju/
   );
 });
+
+test('Configurações Fuxico (DEFAULT_SETTINGS)', () => {
+  assert.ok(DEFAULT_SETTINGS.fuxicoUrl.startsWith('https://'));
+  assert.ok(DEFAULT_SETTINGS.fuxicoToken.length > 0);
+});
+
+test('Atualizador de Frontmatter (updateFrontmatterString)', () => {
+  // Nota sem frontmatter
+  const rawWithoutFm = '# Meu Artigo\n\nConteúdo aqui.';
+  const updated1 = require('../main.js').updateFrontmatterString(rawWithoutFm, {
+    pdfUrl: 'https://2lp.in/12345.pdf'
+  });
+  assert.ok(updated1.startsWith('---\n'));
+  assert.ok(updated1.includes('fuxico_pdf: https://2lp.in/12345.pdf'));
+  assert.ok(updated1.includes('tags:\n  - fuxico'));
+
+  // Nota com frontmatter existente
+  const rawWithFm = `---
+title: Teste
+tags:
+  - artigo
+---
+
+# Teste`;
+  const updated2 = require('../main.js').updateFrontmatterString(rawWithFm, {
+    pdfUrl: 'https://2lp.in/pdf1.pdf',
+    mdUrl: 'https://2lp.in/md1.md'
+  });
+  assert.ok(updated2.includes('title: Teste'));
+  assert.ok(updated2.includes('fuxico_pdf: https://2lp.in/pdf1.pdf'));
+  assert.ok(updated2.includes('fuxico_md: https://2lp.in/md1.md'));
+  assert.ok(updated2.includes('  - fuxico'));
+});
+
+test('Compilador de PDF (compileMarkdownToPdf) - Sucesso com fetch padrão', async () => {
+  const { compileMarkdownToPdf } = require('../main.js');
+  const mockFetch = async (url, opts) => {
+    assert.strictEqual(url, 'http://baquara:3000/compile');
+    return {
+      ok: true,
+      status: 200,
+      arrayBuffer: async () => new Uint8Array([37, 80, 68, 70]).buffer
+    };
+  };
+
+  const buffer = await compileMarkdownToPdf('http://baquara:3000', '# Artigo', mockFetch);
+  assert.ok(buffer);
+  assert.strictEqual(buffer.byteLength, 4);
+});

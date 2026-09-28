@@ -6,7 +6,7 @@ on:
   pull_request:
 
 jobs:
-  check:
+  test:
     runs-on: native
     steps:
       - uses: actions/checkout@v4

@@ -7,6 +7,8 @@ try {
 
 const DEFAULT_SETTINGS = {
   serverUrl: 'http://baquara:3000',
+  fuxicoUrl: 'https://2lp.in',
+  fuxicoToken: 'juruping4',
   debounceMs: 400
 };
 
@@ -54,7 +56,6 @@ function buildRenderPayload(source, engine) {
     throw new Error('Código do diagrama está vazio');
   }
 
-  // Se o código não contiver cabeçalho com crases, envelopa no bloco correspondente
   if (!cleanCode.startsWith('```')) {
     return {
       code: `\`\`\`${engine}\n${cleanCode}\n\`\`\``,
@@ -70,7 +71,6 @@ function buildRenderPayload(source, engine) {
 
 /**
  * Dispara requisição HTTP à API /render do Joaju.
- * Compatível tanto com fetch padrão quanto com requestUrl do Obsidian.
  */
 async function fetchDiagramSvg(serverUrl, source, engine, requestFn = globalThis.fetch) {
   const payload = buildRenderPayload(source, engine);
@@ -123,7 +123,7 @@ async function fetchDiagramSvg(serverUrl, source, engine, requestFn = globalThis
       const parsed = JSON.parse(responseText);
       if (parsed.error) detail = parsed.error;
     } catch {
-      // Ignora erro de JSON e mantém responseText original
+      // Ignora erro de JSON
     }
     throw new Error(detail || `Erro HTTP ${status} ao compilar diagrama`);
   }
@@ -135,7 +135,7 @@ async function fetchDiagramSvg(serverUrl, source, engine, requestFn = globalThis
       svgContent = parsed.svg;
     }
   } catch {
-    // Mantém responseText original se já for SVG puro
+    // Mantém responseText original
   }
 
   if (!svgContent.includes('<svg') && !svgContent.includes('<?xml')) {
@@ -143,6 +143,141 @@ async function fetchDiagramSvg(serverUrl, source, engine, requestFn = globalThis
   }
 
   return svgContent;
+}
+
+/**
+ * Dispara requisição HTTP à API /compile do Joaju para gerar PDF.
+ */
+async function compileMarkdownToPdf(serverUrl, markdown, requestFn = globalThis.fetch) {
+  const normalizedUrl = (serverUrl || DEFAULT_SETTINGS.serverUrl).replace(/\/+$/, '');
+  const targetEndpoint = `${normalizedUrl}/compile`;
+
+  try {
+    if (obsidian?.requestUrl && (!requestFn || requestFn === obsidian.requestUrl)) {
+      const res = await obsidian.requestUrl({
+        url: targetEndpoint,
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ markdown }),
+        throw: false
+      });
+
+      if (res.status >= 400) {
+        throw new Error(res.text || `Erro HTTP ${res.status} ao compilar PDF no Joaju`);
+      }
+      return res.arrayBuffer;
+    }
+
+    const fn = requestFn || globalThis.fetch;
+    const res = await fn(targetEndpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ markdown })
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(errText || `Erro HTTP ${res.status} ao compilar PDF no Joaju`);
+    }
+
+    return await res.arrayBuffer();
+  } catch (err) {
+    throw new Error(`Falha na compilação do Joaju: ${err.message}`);
+  }
+}
+
+/**
+ * Faz upload de um arquivo binário ou texto para o Fuxico (protocolo 0x0.st / rustypaste).
+ */
+async function uploadToFuxico(
+  fuxicoUrl,
+  token,
+  filename,
+  fileData,
+  mimeType = 'application/octet-stream'
+) {
+  const normalizedUrl = (fuxicoUrl || DEFAULT_SETTINGS.fuxicoUrl).replace(/\/+$/, '');
+
+  const formData = new FormData();
+  let blob;
+  if (typeof fileData === 'string') {
+    blob = new Blob([fileData], { type: mimeType });
+  } else {
+    blob = new Blob([fileData], { type: mimeType });
+  }
+  formData.append('file', blob, filename);
+
+  const headers = {};
+  if (token?.trim()) {
+    headers.Authorization = `Bearer ${token.trim()}`;
+  }
+
+  const res = await fetch(normalizedUrl, {
+    method: 'POST',
+    headers,
+    body: formData
+  });
+
+  if (!res.ok) {
+    const errText = await res.text().catch(() => '');
+    throw new Error(`Erro ${res.status} no Fuxico: ${errText}`);
+  }
+
+  const rawUrl = await res.text();
+  const publicUrl = rawUrl.trim();
+  if (!publicUrl.startsWith('http')) {
+    throw new Error(`Resposta inesperada do Fuxico: ${publicUrl}`);
+  }
+
+  return publicUrl;
+}
+
+/**
+ * Atualiza o frontmatter YAML de uma nota incluindo as URLs do Fuxico e tag 'fuxico'.
+ */
+function updateFrontmatterString(content, { pdfUrl, mdUrl }) {
+  const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+  if (!match) {
+    let yaml = '---\n';
+    if (pdfUrl) yaml += `fuxico_pdf: ${pdfUrl}\n`;
+    if (mdUrl) yaml += `fuxico_md: ${mdUrl}\n`;
+    yaml += 'tags:\n  - fuxico\n---\n\n';
+    return yaml + content;
+  }
+
+  let yamlBody = match[1];
+
+  if (pdfUrl) {
+    if (yamlBody.match(/fuxico_pdf:\s*.+/)) {
+      yamlBody = yamlBody.replace(/fuxico_pdf:\s*.+/, `fuxico_pdf: ${pdfUrl}`);
+    } else {
+      yamlBody += `\nfuxico_pdf: ${pdfUrl}`;
+    }
+  }
+
+  if (mdUrl) {
+    if (yamlBody.match(/fuxico_md:\s*.+/)) {
+      yamlBody = yamlBody.replace(/fuxico_md:\s*.+/, `fuxico_md: ${mdUrl}`);
+    } else {
+      yamlBody += `\nfuxico_md: ${mdUrl}`;
+    }
+  }
+
+  // Verifica se a tag 'fuxico' já existe no bloco de tags
+  const hasFuxicoTag = /-\s*fuxico(\r?\n|$)/.test(yamlBody);
+  if (!hasFuxicoTag) {
+    if (/tags:\s*(\r?\n|$)/.test(yamlBody)) {
+      yamlBody = yamlBody.replace(/tags:\s*(\r?\n)/, '$&  - fuxico$1');
+    } else {
+      yamlBody += '\ntags:\n  - fuxico';
+    }
+  }
+
+  return content.replace(/^---\r?\n[\s\S]*?\r?\n---/, `---\n${yamlBody.trim()}\n---`);
 }
 
 const PluginBase = obsidian.Plugin || class {};
@@ -158,13 +293,13 @@ class JoajuSettingTab extends PluginSettingTabBase {
     const { containerEl } = this;
     containerEl.empty();
 
-    containerEl.createEl('h2', { text: 'Configurações do Joaju Live Preview' });
+    containerEl.createEl('h2', { text: 'Configurações do Joaju & Fuxico' });
 
     if (!obsidian.Setting) return;
 
     new obsidian.Setting(containerEl)
       .setName('Servidor Joaju (URL)')
-      .setDesc('Endereço base do servidor de renderização Joaju.')
+      .setDesc('Endereço do compilador e renderizador Joaju.')
       .addText((text) =>
         text
           .setPlaceholder(DEFAULT_SETTINGS.serverUrl)
@@ -176,10 +311,34 @@ class JoajuSettingTab extends PluginSettingTabBase {
       );
 
     new obsidian.Setting(containerEl)
+      .setName('Servidor Fuxico (URL)')
+      .setDesc('Endereço base do cofre e encurtador Fuxico.')
+      .addText((text) =>
+        text
+          .setPlaceholder(DEFAULT_SETTINGS.fuxicoUrl)
+          .setValue(this.plugin.settings.fuxicoUrl)
+          .onChange(async (value) => {
+            this.plugin.settings.fuxicoUrl = value.trim() || DEFAULT_SETTINGS.fuxicoUrl;
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new obsidian.Setting(containerEl)
+      .setName('Token de Autenticação Fuxico')
+      .setDesc('Ficha/chave de autorização Bearer para upload no Fuxico.')
+      .addText((text) =>
+        text
+          .setPlaceholder(DEFAULT_SETTINGS.fuxicoToken)
+          .setValue(this.plugin.settings.fuxicoToken)
+          .onChange(async (value) => {
+            this.plugin.settings.fuxicoToken = value.trim() || DEFAULT_SETTINGS.fuxicoToken;
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new obsidian.Setting(containerEl)
       .setName('Debounce (ms)')
-      .setDesc(
-        'Intervalo em milissegundos para aguardar o fim da digitação antes de renderizar o diagrama.'
-      )
+      .setDesc('Intervalo para aguardar o fim da digitação antes de renderizar diagramas.')
       .addSlider((slider) =>
         slider
           .setLimits(100, 2000, 50)
@@ -215,6 +374,153 @@ class JoajuPlugin extends PluginBase {
     if (obsidian.PluginSettingTab) {
       this.addSettingTab(new JoajuSettingTab(this.app, this));
     }
+
+    // Ribbon Icon (Barra lateral esquerda)
+    if (this.addRibbonIcon) {
+      this.addRibbonIcon('printer', 'Joaju: Compilar Artigo para PDF', async () => {
+        await this.compileCurrentNote(false);
+      });
+    }
+
+    // Comandos no Command Palette
+    if (this.addCommand) {
+      this.addCommand({
+        id: 'compile-pdf',
+        name: 'Compilar nota atual para PDF',
+        callback: async () => {
+          await this.compileCurrentNote(false);
+        }
+      });
+
+      this.addCommand({
+        id: 'compile-fuxico-pdf',
+        name: 'Compilar e Fuxicar (PDF)',
+        callback: async () => {
+          await this.compileCurrentNote(true);
+        }
+      });
+
+      this.addCommand({
+        id: 'fuxico-markdown',
+        name: 'Fuxicar nota atual (Markdown puro)',
+        callback: async () => {
+          await this.publishCurrentNoteToFuxico();
+        }
+      });
+    }
+  }
+
+  async compileCurrentNote(andUploadFuxico = false) {
+    const activeFile = this.app?.workspace?.getActiveFile?.();
+    if (!activeFile) {
+      if (obsidian.Notice) new obsidian.Notice('❌ Nenhuma nota ativa para compilar!');
+      return;
+    }
+
+    if (obsidian.Notice) new obsidian.Notice('⏳ Compilando artigo via Joaju...');
+
+    try {
+      const content = await this.app.vault.read(activeFile);
+      const requestFn = obsidian.requestUrl || globalThis.fetch;
+      const pdfBuffer = await compileMarkdownToPdf(this.settings.serverUrl, content, requestFn);
+
+      const folderPath = activeFile.parent ? activeFile.parent.path : '';
+      const pdfPath = `${folderPath && folderPath !== '/' ? `${folderPath}/` : ''}${activeFile.basename}.pdf`;
+
+      const existingFile = this.app.vault.getAbstractFileByPath(pdfPath);
+      if (existingFile) {
+        await this.app.vault.modifyBinary(existingFile, pdfBuffer);
+      } else {
+        await this.app.vault.createBinary(pdfPath, pdfBuffer);
+      }
+
+      if (andUploadFuxico) {
+        if (obsidian.Notice) new obsidian.Notice('⚡ Espalhando o bafão no Fuxico...');
+        const publicUrl = await uploadToFuxico(
+          this.settings.fuxicoUrl,
+          this.settings.fuxicoToken,
+          `${activeFile.basename}.pdf`,
+          pdfBuffer,
+          'application/pdf'
+        );
+
+        await this.updateNoteFrontmatter(activeFile, { pdfUrl: publicUrl });
+
+        if (navigator?.clipboard?.writeText) {
+          await navigator.clipboard.writeText(publicUrl);
+        }
+
+        if (obsidian.Notice) {
+          new obsidian.Notice(`⚡ PDF fuxicado com sucesso:\n${publicUrl}\n(Link copiado!)`, 8000);
+        }
+      } else {
+        if (obsidian.Notice) {
+          new obsidian.Notice(`✅ PDF gerado com sucesso: ${activeFile.basename}.pdf`);
+        }
+      }
+    } catch (err) {
+      if (obsidian.Notice) {
+        new obsidian.Notice(`❌ Erro no Joaju: ${err.message}`, 10000);
+      }
+    }
+  }
+
+  async publishCurrentNoteToFuxico() {
+    const activeFile = this.app?.workspace?.getActiveFile?.();
+    if (!activeFile) {
+      if (obsidian.Notice) new obsidian.Notice('❌ Nenhuma nota ativa para compartilhar!');
+      return;
+    }
+
+    if (obsidian.Notice) new obsidian.Notice('⚡ Espalhando Markdown no Fuxico...');
+
+    try {
+      const content = await this.app.vault.read(activeFile);
+      const publicUrl = await uploadToFuxico(
+        this.settings.fuxicoUrl,
+        this.settings.fuxicoToken,
+        `${activeFile.basename}.md`,
+        content,
+        'text/markdown; charset=utf-8'
+      );
+
+      await this.updateNoteFrontmatter(activeFile, { mdUrl: publicUrl });
+
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(publicUrl);
+      }
+
+      if (obsidian.Notice) {
+        new obsidian.Notice(
+          `⚡ Markdown fuxicado com sucesso:\n${publicUrl}\n(Link copiado!)`,
+          8000
+        );
+      }
+    } catch (err) {
+      if (obsidian.Notice) {
+        new obsidian.Notice(`❌ Erro no Fuxico: ${err.message}`, 10000);
+      }
+    }
+  }
+
+  async updateNoteFrontmatter(file, { pdfUrl, mdUrl }) {
+    if (this.app?.fileManager?.processFrontMatter) {
+      await this.app.fileManager.processFrontMatter(file, (fm) => {
+        if (pdfUrl) fm.fuxico_pdf = pdfUrl;
+        if (mdUrl) fm.fuxico_md = mdUrl;
+        if (!fm.tags) {
+          fm.tags = ['fuxico'];
+        } else if (Array.isArray(fm.tags) && !fm.tags.includes('fuxico')) {
+          fm.tags.push('fuxico');
+        } else if (typeof fm.tags === 'string' && !fm.tags.includes('fuxico')) {
+          fm.tags = `${fm.tags}, fuxico`;
+        }
+      });
+    } else if (this.app?.vault) {
+      const raw = await this.app.vault.read(file);
+      const updated = updateFrontmatterString(raw, { pdfUrl, mdUrl });
+      await this.app.vault.modify(file, updated);
+    }
   }
 
   registerProcessor(blockName, canonicalEngine) {
@@ -232,14 +538,12 @@ class JoajuPlugin extends PluginBase {
 
     const cacheKey = `${engine}:${cleanSource}`;
 
-    // 1. Se estiver no cache, renderiza de forma instantânea
     if (this.cache.has(cacheKey)) {
       const cachedSvg = this.cache.get(cacheKey);
       this.renderSvgToElement(el, cachedSvg);
       return;
     }
 
-    // 2. Debounce para evitar sobrecarga durante a digitação
     const timerKey = `${ctx?.sourcePath || ''}:${engine}:${el.id || Math.random()}`;
     if (this.debounceTimers.has(timerKey)) {
       clearTimeout(this.debounceTimers.get(timerKey));
@@ -309,3 +613,6 @@ module.exports.DEFAULT_SETTINGS = DEFAULT_SETTINGS;
 module.exports.createDiagramCache = createDiagramCache;
 module.exports.buildRenderPayload = buildRenderPayload;
 module.exports.fetchDiagramSvg = fetchDiagramSvg;
+module.exports.compileMarkdownToPdf = compileMarkdownToPdf;
+module.exports.uploadToFuxico = uploadToFuxico;
+module.exports.updateFrontmatterString = updateFrontmatterString;
