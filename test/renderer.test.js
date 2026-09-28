@@ -181,3 +181,74 @@ test('Compilador de PDF (compileMarkdownToPdf) - Sucesso com fetch padrão', asy
   assert.ok(buffer);
   assert.strictEqual(buffer.byteLength, 4);
 });
+
+test('Comparador de Versões SemVer (isNewerVersion)', () => {
+  const { isNewerVersion } = require('../main.js');
+
+  assert.strictEqual(isNewerVersion('0.2.0', '0.1.0'), true);
+  assert.strictEqual(isNewerVersion('0.1.1', '0.1.0'), true);
+  assert.strictEqual(isNewerVersion('1.0.0', '0.9.9'), true);
+  assert.strictEqual(isNewerVersion('v0.2.0', '0.1.0'), true);
+  assert.strictEqual(isNewerVersion('0.1.0', '0.1.0'), false);
+  assert.strictEqual(isNewerVersion('0.0.9', '0.1.0'), false);
+  assert.strictEqual(isNewerVersion('0.1.0', '0.2.0'), false);
+  assert.strictEqual(isNewerVersion(null, '0.1.0'), false);
+});
+
+test('Verificador de Atualizações Codeberg (checkCodebergUpdate)', async () => {
+  const { checkCodebergUpdate } = require('../main.js');
+
+  const mockFetchNew = async (url) => {
+    assert.ok(url.includes('codeberg.org/lumenpink/joaju-obsidian'));
+    return {
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ version: '0.2.0' })
+    };
+  };
+
+  const resNew = await checkCodebergUpdate(
+    'lumenpink/joaju-obsidian',
+    'main',
+    '0.1.0',
+    mockFetchNew
+  );
+  assert.strictEqual(resNew.hasUpdate, true);
+  assert.strictEqual(resNew.remoteVersion, '0.2.0');
+
+  const mockFetchSame = async () => ({
+    ok: true,
+    status: 200,
+    text: async () => JSON.stringify({ version: '0.1.0' })
+  });
+
+  const resSame = await checkCodebergUpdate(
+    'lumenpink/joaju-obsidian',
+    'main',
+    '0.1.0',
+    mockFetchSame
+  );
+  assert.strictEqual(resSame.hasUpdate, false);
+});
+
+test('Download de Arquivos do Plugin (downloadCodebergPluginFiles)', async () => {
+  const { downloadCodebergPluginFiles } = require('../main.js');
+
+  const mockFetch = async (url) => {
+    if (url.includes('manifest.json')) {
+      return { ok: true, text: async () => '{"id":"joaju-obsidian"}' };
+    }
+    if (url.includes('main.js')) {
+      return { ok: true, text: async () => 'console.log("hello");' };
+    }
+    if (url.includes('styles.css')) {
+      return { ok: true, text: async () => '.body {}' };
+    }
+    return { ok: false, status: 404 };
+  };
+
+  const files = await downloadCodebergPluginFiles('lumenpink/joaju-obsidian', 'main', mockFetch);
+  assert.strictEqual(files['manifest.json'], '{"id":"joaju-obsidian"}');
+  assert.strictEqual(files['main.js'], 'console.log("hello");');
+  assert.strictEqual(files['styles.css'], '.body {}');
+});

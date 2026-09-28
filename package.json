@@ -7,7 +7,8 @@
     "test": "node --test",
     "test:coverage": "node --test --experimental-test-coverage",
     "lint": "biome check .",
-    "lint:fix": "biome check --write ."
+    "lint:fix": "biome check --write .",
+    "deploy": "mkdir -p /home/lumen/obsidian/.obsidian/plugins/joaju-obsidian && cp main.js manifest.json styles.css /home/lumen/obsidian/.obsidian/plugins/joaju-obsidian/"
   },
   "keywords": ["obsidian", "obsidian-plugin", "joaju", "kinship", "d2", "plantuml", "diagrams"],
   "author": "Lumen Pink <hi@lumen.pink>",

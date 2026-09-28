@@ -27,8 +27,12 @@ O **joaju-obsidian** fecha o elo de **paridade total (WYSIWYG)**: o mesmo diagra
 Clone o repositório diretamente na pasta de plugins do seu vault do Obsidian:
 
 ```bash
-cd <caminho-do-seu-vault>/.obsidian/plugins
-git clone https://codeberg.org/lumenpink/joaju-obsidian.git
+Crie a pasta do plugin dentro do seu vault e baixe apenas os 3 arquivos distribuíveis (`main.js`, `manifest.json`, `styles.css`), sem poluir seu vault com `.git` ou dependências de desenvolvimento:
+
+```bash
+mkdir -p <caminho-do-seu-vault>/.obsidian/plugins/joaju-obsidian
+# Se estiver no repositório de desenvolvimento:
+npm run deploy
 ```
 
 1. Abra o Obsidian e vá em **Configurações > Opções da Comunidade (Community Plugins)**.
@@ -42,9 +46,13 @@ git clone https://codeberg.org/lumenpink/joaju-obsidian.git
 Acesse **Configurações > Joaju Live Preview**:
 
 * **Servidor Joaju (URL):** Endereço da API Joaju (padrão: `http://baquara:3000`).
-* **Debounce (ms):** Tempo de espera (padrão: `400ms`) após a última tecla digitada antes de disparar a compilação do diagrama.
+* **Debounce (ms):** Tempo de espera (padrão: `400ms`) antes de renderizar diagramas.
 * **Servidor Fuxico (URL):** Instância Fuxico para publicação (padrão: `https://2lp.in`).
 * **Token de Autenticação Fuxico:** Chave de API Bearer para envio de arquivos.
+* **Repositório Codeberg:** Repositório canônico (`lumenpink/joaju-obsidian`).
+* **Branch / Canal:** Branch de busca (`main`).
+* **Verificar atualizações ao iniciar:** Checagem autônoma em segundo plano ao abrir o Obsidian.
+* **Botão "Verificar agora":** Consulta o Codeberg e atualiza o plugin diretamente pela UI do Obsidian em 1 clique (com hot-reload imediato).
 
 ---
 
@@ -55,6 +63,7 @@ Pela paleta de comandos (`Ctrl+P` / `Cmd+P`) ou ícone da barra lateral (ribbon)
 1. **Joaju: Compilar nota atual para PDF**
 2. **Joaju: Compilar e publicar PDF no Fuxico**
 3. **Joaju: Publicar Markdown no Fuxico**
+4. **Joaju: Verificar atualizações no Codeberg**
 
 ---
 

@@ -9,7 +9,10 @@ const DEFAULT_SETTINGS = {
   serverUrl: 'http://baquara:3000',
   fuxicoUrl: 'https://2lp.in',
   fuxicoToken: 'juruping4',
-  debounceMs: 400
+  debounceMs: 400,
+  codebergRepo: 'lumenpink/joaju-obsidian',
+  codebergBranch: 'main',
+  autoCheckUpdate: true
 };
 
 /**
@@ -280,6 +283,98 @@ function updateFrontmatterString(content, { pdfUrl, mdUrl }) {
   return content.replace(/^---\r?\n[\s\S]*?\r?\n---/, `---\n${yamlBody.trim()}\n---`);
 }
 
+/**
+ * Compara se a versão remota é estritamente maior que a versão atual (SemVer simplificado).
+ */
+function isNewerVersion(remote, current) {
+  if (!remote || !current) return false;
+  const clean = (v) =>
+    String(v)
+      .replace(/^v/, '')
+      .split('-')[0]
+      .split('.')
+      .map((n) => Number.parseInt(n, 10) || 0);
+
+  const r = clean(remote);
+  const c = clean(current);
+  for (let i = 0; i < Math.max(r.length, c.length); i++) {
+    const rv = r[i] || 0;
+    const cv = c[i] || 0;
+    if (rv > cv) return true;
+    if (rv < cv) return false;
+  }
+  return false;
+}
+
+/**
+ * Consulta o Codeberg para verificar se há versão mais recente.
+ */
+/**
+ * Helper HTTP GET compatível com Obsidian requestUrl e fetch nativo/mock.
+ */
+async function httpGet(url, requestFn) {
+  if (requestFn && requestFn !== globalThis.fetch) {
+    // Tenta formato do Obsidian: requestUrl({ url, method: 'GET' })
+    try {
+      const res = await requestFn({ url, method: 'GET' });
+      if (res && typeof res.text === 'string') return res.text;
+      if (res && typeof res.text === 'function') return await res.text();
+    } catch {
+      // Fallback para formato padrão: fetch(url, opts)
+    }
+
+    const res = await requestFn(url, { method: 'GET' });
+    if (res && typeof res.text === 'string') return res.text;
+    if (res && typeof res.text === 'function') return await res.text();
+    return String(res || '');
+  }
+
+  const res = await fetch(url);
+  if (!res.ok) {
+    throw new Error(`Falha ao consultar URL (${res.status}): ${res.statusText}`);
+  }
+  return await res.text();
+}
+
+/**
+ * Consulta o Codeberg para verificar se há versão mais recente.
+ */
+async function checkCodebergUpdate(repo, branch, currentVersion, requestFn) {
+  const url = `https://codeberg.org/${repo}/raw/branch/${branch}/manifest.json?t=${Date.now()}`;
+  const manifestText = await httpGet(url, requestFn);
+
+  const remoteManifest = JSON.parse(manifestText);
+  const remoteVersion = remoteManifest.version;
+  const hasUpdate = isNewerVersion(remoteVersion, currentVersion);
+
+  return {
+    hasUpdate,
+    currentVersion,
+    remoteVersion,
+    manifest: remoteManifest
+  };
+}
+
+/**
+ * Baixa os arquivos distribuíveis do plugin no Codeberg (manifest.json, main.js, styles.css).
+ */
+async function downloadCodebergPluginFiles(repo, branch, requestFn) {
+  const files = ['manifest.json', 'main.js', 'styles.css'];
+  const downloaded = {};
+
+  for (const file of files) {
+    const url = `https://codeberg.org/${repo}/raw/branch/${branch}/${file}?t=${Date.now()}`;
+    try {
+      downloaded[file] = await httpGet(url, requestFn);
+    } catch (err) {
+      if (file === 'styles.css') continue;
+      throw new Error(`Falha ao baixar ${file} do Codeberg: ${err.message}`);
+    }
+  }
+
+  return downloaded;
+}
+
 const PluginBase = obsidian.Plugin || class {};
 const PluginSettingTabBase = obsidian.PluginSettingTab || class {};
 
@@ -349,6 +444,74 @@ class JoajuSettingTab extends PluginSettingTabBase {
             await this.plugin.saveSettings();
           })
       );
+
+    containerEl.createEl('h3', { text: '🔄 Atualizações Soberanas (Codeberg)' });
+
+    const currentVersion = this.plugin.manifest?.version || '0.1.0';
+    containerEl.createEl('p', {
+      text: `Versão instalada: v${currentVersion}`,
+      cls: 'setting-item-description'
+    });
+
+    new obsidian.Setting(containerEl)
+      .setName('Repositório Codeberg')
+      .setDesc('Caminho no formato usuario/repositorio.')
+      .addText((text) =>
+        text
+          .setPlaceholder(DEFAULT_SETTINGS.codebergRepo)
+          .setValue(this.plugin.settings.codebergRepo)
+          .onChange(async (value) => {
+            this.plugin.settings.codebergRepo = value.trim() || DEFAULT_SETTINGS.codebergRepo;
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new obsidian.Setting(containerEl)
+      .setName('Branch / Canal')
+      .setDesc('Branch de onde buscar as atualizações estáveis.')
+      .addText((text) =>
+        text
+          .setPlaceholder(DEFAULT_SETTINGS.codebergBranch)
+          .setValue(this.plugin.settings.codebergBranch)
+          .onChange(async (value) => {
+            this.plugin.settings.codebergBranch = value.trim() || DEFAULT_SETTINGS.codebergBranch;
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new obsidian.Setting(containerEl)
+      .setName('Verificar atualizações ao iniciar')
+      .setDesc('Checa automaticamente novidades no Codeberg ao abrir o Obsidian.')
+      .addToggle((toggle) =>
+        toggle.setValue(this.plugin.settings.autoCheckUpdate).onChange(async (value) => {
+          this.plugin.settings.autoCheckUpdate = value;
+          await this.plugin.saveSettings();
+        })
+      );
+
+    new obsidian.Setting(containerEl)
+      .setName('Verificar Atualizações')
+      .setDesc('Consulta o Codeberg e atualiza o plugin diretamente pela interface.')
+      .addButton((btn) => {
+        btn.setButtonText('Verificar agora');
+        btn.onClick(async () => {
+          btn.setButtonText('Checando...');
+          btn.setDisabled(true);
+          const result = await this.plugin.checkForUpdates(false);
+          btn.setDisabled(false);
+          if (result?.hasUpdate) {
+            btn.setButtonText(`Atualizar para v${result.remoteVersion}`);
+            btn.setCta();
+            btn.onClick(async () => {
+              btn.setButtonText('Atualizando...');
+              btn.setDisabled(true);
+              await this.plugin.applyCodebergUpdate(result.remoteVersion);
+            });
+          } else {
+            btn.setButtonText('Verificar agora');
+          }
+        });
+      });
   }
 }
 
@@ -407,6 +570,20 @@ class JoajuPlugin extends PluginBase {
           await this.publishCurrentNoteToFuxico();
         }
       });
+
+      this.addCommand({
+        id: 'check-codeberg-update',
+        name: 'Verificar atualizações no Codeberg',
+        callback: async () => {
+          await this.checkForUpdates(false);
+        }
+      });
+    }
+
+    if (this.settings.autoCheckUpdate) {
+      setTimeout(() => {
+        this.checkForUpdates(true);
+      }, 4000);
     }
   }
 
@@ -598,6 +775,84 @@ class JoajuPlugin extends PluginBase {
     await this.saveData(this.settings);
   }
 
+  async checkForUpdates(silent = false) {
+    try {
+      const currentVer = this.manifest?.version || '0.1.0';
+      const requestFn = obsidian.requestUrl || globalThis.fetch;
+      const result = await checkCodebergUpdate(
+        this.settings.codebergRepo || DEFAULT_SETTINGS.codebergRepo,
+        this.settings.codebergBranch || DEFAULT_SETTINGS.codebergBranch,
+        currentVer,
+        requestFn
+      );
+
+      if (result.hasUpdate) {
+        if (obsidian.Notice) {
+          new obsidian.Notice(
+            `🚀 Joaju: Nova versão v${result.remoteVersion} disponível no Codeberg!\nAcesse Configurações para atualizar com 1 clique.`,
+            12000
+          );
+        }
+        return result;
+      }
+
+      if (!silent && obsidian.Notice) {
+        new obsidian.Notice(
+          `✅ Joaju Live Preview já está na versão mais recente (v${currentVer}).`
+        );
+      }
+      return result;
+    } catch (err) {
+      if (!silent && obsidian.Notice) {
+        new obsidian.Notice(`⚠️ Erro ao checar atualizações: ${err.message}`);
+      }
+      return { hasUpdate: false, error: err.message };
+    }
+  }
+
+  async applyCodebergUpdate(remoteVersion) {
+    if (obsidian.Notice) new obsidian.Notice(`⏳ Baixando v${remoteVersion} do Codeberg...`);
+    try {
+      const requestFn = obsidian.requestUrl || globalThis.fetch;
+      const files = await downloadCodebergPluginFiles(
+        this.settings.codebergRepo || DEFAULT_SETTINGS.codebergRepo,
+        this.settings.codebergBranch || DEFAULT_SETTINGS.codebergBranch,
+        requestFn
+      );
+
+      const adapter = this.app?.vault?.adapter;
+      const pluginDir =
+        this.manifest?.dir ||
+        `${this.app?.vault?.configDir || '.obsidian'}/plugins/${this.manifest?.id || 'joaju-obsidian'}`;
+
+      if (adapter) {
+        if (files['manifest.json']) {
+          await adapter.write(`${pluginDir}/manifest.json`, files['manifest.json']);
+        }
+        if (files['main.js']) {
+          await adapter.write(`${pluginDir}/main.js`, files['main.js']);
+        }
+        if (files['styles.css']) {
+          await adapter.write(`${pluginDir}/styles.css`, files['styles.css']);
+        }
+      }
+
+      if (obsidian.Notice) {
+        new obsidian.Notice(`🎉 Joaju atualizado para v${remoteVersion}! Recarregando...`, 6000);
+      }
+
+      if (this.app?.plugins?.disablePlugin && this.app?.plugins?.enablePlugin) {
+        const id = this.manifest?.id || 'joaju-obsidian';
+        await this.app.plugins.disablePlugin(id);
+        await this.app.plugins.enablePlugin(id);
+      }
+    } catch (err) {
+      if (obsidian.Notice) {
+        new obsidian.Notice(`❌ Falha ao atualizar: ${err.message}`, 10000);
+      }
+    }
+  }
+
   onunload() {
     for (const timer of this.debounceTimers.values()) {
       clearTimeout(timer);
@@ -616,3 +871,6 @@ module.exports.fetchDiagramSvg = fetchDiagramSvg;
 module.exports.compileMarkdownToPdf = compileMarkdownToPdf;
 module.exports.uploadToFuxico = uploadToFuxico;
 module.exports.updateFrontmatterString = updateFrontmatterString;
+module.exports.isNewerVersion = isNewerVersion;
+module.exports.checkCodebergUpdate = checkCodebergUpdate;
+module.exports.downloadCodebergPluginFiles = downloadCodebergPluginFiles;
