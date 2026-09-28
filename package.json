@@ -1,0 +1,18 @@
+{
+  "name": "joaju-obsidian",
+  "version": "0.1.0",
+  "description": "Plugin oficial do Obsidian para o ecossistema Joaju (Live Preview de Kinship, D2 e PlantUML)",
+  "main": "main.js",
+  "scripts": {
+    "test": "node --test",
+    "test:coverage": "node --test --experimental-test-coverage",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write ."
+  },
+  "keywords": ["obsidian", "obsidian-plugin", "joaju", "kinship", "d2", "plantuml", "diagrams"],
+  "author": "Lumen Pink <hi@lumen.pink>",
+  "license": "Apache-2.0",
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.4"
+  }
+}

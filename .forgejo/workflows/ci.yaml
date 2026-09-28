@@ -1,0 +1,17 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: native
+    steps:
+      - uses: actions/checkout@v4
+      - name: GOST Compliance Audit
+        run: |
+          if command -v cccp >/dev/null 2>&1; then
+            cccp check --strict
+          fi
