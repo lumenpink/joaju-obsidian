@@ -8,9 +8,12 @@ O **joaju-obsidian** fecha o elo de **paridade total (WYSIWYG)**: o mesmo diagra
 
 ## 🌟 Recursos
 
-- **🧬 Kinship Clínico (`kinship`, `kinship2`, `heredograma`, `pedigree`):** Renderiza heredogramas genealógicos completos segundo o padrão Bennett 2008 (`kinship2` em R).
+- **🧬 Heredogramas Clínicos (`pedtools`, `kinship2`):** Renderiza heredogramas genealógicos canônicos pelo padrão pedsuite em R (`pedtools`) ou padrão Bennett 2008 (`kinship2`).
+- **🧪 Química Estrutural 2D (`openchemlib`, `openbabel`):** Visualização vetorial instantânea de moléculas químicas a partir de código SMILES ou arquivos `.mol`/`.smi`.
+- **📊 Tabelas Acadêmicas (`table`):** Tabelas formatadas com réguas horizontais APA/ABNT a partir de dados tabulares ou arquivos `.csv`.
 - **📐 D2 Declarativo (`d2`):** Diagramação moderna de fluxos, arquiteturas e tabelas SQL com layout de alta legibilidade.
-- **🏗️ PlantUML (`plantuml`, `puml`):** Diagramas formais de sequência, classes, estados, atividades e cronogramas.
+- **🏗️ PlantUML & Graphviz (`plantuml`, `graphviz`, `mermaid`):** Diagramas formais de sequência, classes, estados, atividades e grafos de dependência.
+- **📦 Empacotamento de Workspace (ZIP):** Ao compilar a nota para PDF, o plugin cria um pacote ZIP em memória contendo a nota e todos os anexos locais (imagens, CSVs, MOLs), garantindo compilação fidedigna sem inchaço de Base64.
 - **📇 Cards Tipográficos de Links:** Links isolados na linha são automaticamente expandidos em cards ricos com título, imagem de capa, snippet, domínio e tempo de leitura — sem Chromium, usando Readability no backend.
 - **📄 Compilação Nativa de Artigos (PDF):** Envia a nota Markdown atual para compilação no Joaju e salva o PDF resultante diretamente na mesma pasta da nota.
 - **🦊 Integração com Fuxico (Pastebin):**
@@ -114,20 +117,48 @@ cards: false
 ---
 ```
 
-### 2. Heredograma Clínico (`kinship`)
+### 2. Heredograma Clínico Canônico (`pedtools`)
 
 ````markdown
-```kinship
-%% layout.width=80%
-id, pai, mae, sexo, fenotipo, falecido, probando, idade, label
-I:1,  0,   0,    M, portador,        0,        0,   68a, Avô
-I:2,  0,   0,    F, portador,        0,        0,   65a, Avó
-II:1, I:1, I:2,  F,  afetado,        0,        1,   38a, Caso [P]
-II:2, I:1, I:2,  M,   higido,        0,        0,   35a, Irmão
+```pedtools
+%% layout.width=85%
+%% title="Linhagem Familiar - Fibrose Cística"
+id,   fid,  mid,  sex, aff
+I:1,    0,    0,    1,   1
+I:2,    0,    0,    2,   1
+II:1, I:1,  I:2,    1,   2
+II:2, I:1,  I:2,    2,   1
 ```
 ````
 
-### 3. Fluxograma Moderno (`d2`)
+Ou referenciando um arquivo CSV anexo:
+
+````markdown
+```pedtools
+%% src=attachments/familia.csv
+%% layout.width=80%
+```
+````
+
+### 3. Química Estrutural 2D (`openchemlib` e `openbabel`)
+
+````markdown
+```openchemlib
+%% title="Molécula de Paracetamol"
+CC(=O)Nc1ccc(O)cc1
+```
+````
+
+### 4. Tabelas Acadêmicas (`table`)
+
+````markdown
+```table
+%% caption="Comparativo dos Parâmetros Clínicos"
+%% src=attachments/dados_clinicos.csv
+```
+````
+
+### 5. Fluxograma Moderno (`d2`)
 
 ````markdown
 ```d2
@@ -138,7 +169,7 @@ analise -> laudo: Laudo Médico
 ```
 ````
 
-### 4. Diagrama de Sequência (`plantuml`)
+### 6. Diagrama de Sequência (`plantuml`)
 
 ````markdown
 ```plantuml

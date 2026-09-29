@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Features
+  - zero-dep zip workspace bundling and strict canonical diagram engines
   - (plugin) adicionar motores openchemlib, openbabel e tabelas academicas booktabs
   - (plugin) live preview de cards, tags canonicas, pedtools e fontes remotas
   - (tatupeba) integrar gatilho nativo de sincronizacao e higienizar defaults

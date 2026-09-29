@@ -207,6 +207,223 @@ async function resolveMarkdownExternalSources(
   return result;
 }
 
+let zlib;
+try {
+  zlib = require('node:zlib');
+} catch {
+  zlib = null;
+}
+
+function createCrc32Table() {
+  const table = new Uint32Array(256);
+  for (let i = 0; i < 256; i++) {
+    let c = i;
+    for (let k = 0; k < 8; k++) {
+      c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    }
+    table[i] = c >>> 0;
+  }
+  return table;
+}
+
+const crcTable = createCrc32Table();
+
+function calculateCrc32(buf) {
+  let crc = 0xffffffff;
+  for (let i = 0; i < buf.length; i++) {
+    crc = crcTable[(crc ^ buf[i]) & 0xff] ^ (crc >>> 8);
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+function packZip(files) {
+  const localHeaders = [];
+  const centralHeaders = [];
+  let offset = 0;
+
+  for (const file of files) {
+    const nameBuf = Buffer.from(file.name, 'utf8');
+    const rawData = Buffer.isBuffer(file.data)
+      ? file.data
+      : typeof file.data === 'string'
+        ? Buffer.from(file.data, 'utf8')
+        : Buffer.from(file.data);
+
+    const uncompressedSize = rawData.length;
+    const crc = calculateCrc32(rawData);
+
+    let compressedData = rawData;
+    let method = 0;
+
+    if (zlib && typeof zlib.deflateRawSync === 'function' && uncompressedSize > 0) {
+      try {
+        const deflated = zlib.deflateRawSync(rawData);
+        if (deflated.length < uncompressedSize) {
+          compressedData = deflated;
+          method = 8;
+        }
+      } catch (_) {}
+    }
+
+    const compressedSize = compressedData.length;
+
+    const localHeader = Buffer.alloc(30 + nameBuf.length);
+    localHeader.writeUInt32LE(0x04034b50, 0);
+    localHeader.writeUInt16LE(20, 4);
+    localHeader.writeUInt16LE(0, 6);
+    localHeader.writeUInt16LE(method, 8);
+    localHeader.writeUInt16LE(0, 10);
+    localHeader.writeUInt16LE(0, 12);
+    localHeader.writeUInt32LE(crc, 14);
+    localHeader.writeUInt32LE(compressedSize, 18);
+    localHeader.writeUInt32LE(uncompressedSize, 22);
+    localHeader.writeUInt16LE(nameBuf.length, 26);
+    localHeader.writeUInt16LE(0, 28);
+    nameBuf.copy(localHeader, 30);
+
+    const centralHeader = Buffer.alloc(46 + nameBuf.length);
+    centralHeader.writeUInt32LE(0x02014b50, 0);
+    centralHeader.writeUInt16LE(20, 4);
+    centralHeader.writeUInt16LE(20, 6);
+    centralHeader.writeUInt16LE(0, 8);
+    centralHeader.writeUInt16LE(method, 10);
+    centralHeader.writeUInt16LE(0, 12);
+    centralHeader.writeUInt16LE(0, 14);
+    centralHeader.writeUInt32LE(crc, 16);
+    centralHeader.writeUInt32LE(compressedSize, 20);
+    centralHeader.writeUInt32LE(uncompressedSize, 24);
+    centralHeader.writeUInt16LE(nameBuf.length, 28);
+    centralHeader.writeUInt16LE(0, 30);
+    centralHeader.writeUInt16LE(0, 32);
+    centralHeader.writeUInt16LE(0, 34);
+    centralHeader.writeUInt16LE(0, 36);
+    centralHeader.writeUInt32LE(0, 38);
+    centralHeader.writeUInt32LE(offset, 42);
+    nameBuf.copy(centralHeader, 46);
+
+    localHeaders.push(localHeader, compressedData);
+    centralHeaders.push(centralHeader);
+
+    offset += localHeader.length + compressedData.length;
+  }
+
+  const centralDirOffset = offset;
+  let centralDirSize = 0;
+  for (const ch of centralHeaders) {
+    centralDirSize += ch.length;
+  }
+
+  const eocd = Buffer.alloc(22);
+  eocd.writeUInt32LE(0x06054b50, 0);
+  eocd.writeUInt16LE(0, 4);
+  eocd.writeUInt16LE(0, 6);
+  eocd.writeUInt16LE(files.length, 8);
+  eocd.writeUInt16LE(files.length, 10);
+  eocd.writeUInt32LE(centralDirSize, 12);
+  eocd.writeUInt32LE(centralDirOffset, 16);
+  eocd.writeUInt16LE(0, 20);
+
+  return Buffer.concat([...localHeaders, ...centralHeaders, eocd]);
+}
+
+/**
+ * Empacota uma nota e todos os seus anexos locais em um arquivo ZIP efêmero para compilação no Joaju.
+ */
+async function buildMarkdownWorkspaceBundle(activeFile, vault, metadataCache = null) {
+  if (!activeFile || !vault) {
+    throw new Error('Arquivo ativo ou cofre não fornecido para montagem do workspace');
+  }
+
+  const rawContent = await vault.read(activeFile);
+  const sourcePath = activeFile.path || '';
+  const collectedFiles = new Map();
+  let normalizedMarkdown = rawContent;
+
+  const resolveVaultFile = (ref) => {
+    if (!ref || ref.startsWith('http://') || ref.startsWith('https://')) return null;
+    let target = null;
+    if (metadataCache && typeof metadataCache.getFirstLinkpathDest === 'function') {
+      target = metadataCache.getFirstLinkpathDest(ref, sourcePath);
+    }
+    if (!target && typeof vault.getAbstractFileByPath === 'function') {
+      target = vault.getAbstractFileByPath(ref);
+    }
+    if (!target && typeof vault.getFiles === 'function') {
+      const files = vault.getFiles();
+      target = files.find((f) => f.path === ref || f.name === ref || f.basename === ref);
+    }
+    return target;
+  };
+
+  // 1. Resolve Wikilinks de mídia: ![[imagem.png]] ou ![[imagem.png|legenda]]
+  const wikiRegex = /!\[\[([^\]|#]+)(?:#[^\]|]*)?(?:\|([^\]]*))?\]\]/g;
+  normalizedMarkdown = normalizedMarkdown.replace(wikiRegex, (match, ref, alias) => {
+    const cleanRef = ref.trim();
+    const target = resolveVaultFile(cleanRef);
+    if (target) {
+      const zipPath = `attachments/${target.name}`;
+      collectedFiles.set(zipPath, target);
+      const label = alias ? alias.trim() : target.basename;
+      return `![${label}](${zipPath})`;
+    }
+    return match;
+  });
+
+  // 2. Resolve Markdown standard images com caminhos locais: ![legenda](anexos/foto.png)
+  const mdImgRegex = /!\[([^\]]*)\]\(([^)]+)\)/g;
+  normalizedMarkdown = normalizedMarkdown.replace(mdImgRegex, (match, alt, ref) => {
+    const cleanRef = ref.trim().replace(/^["']|["']$/g, '');
+    if (
+      cleanRef.startsWith('http://') ||
+      cleanRef.startsWith('https://') ||
+      cleanRef.startsWith('data:')
+    ) {
+      return match;
+    }
+    const target = resolveVaultFile(cleanRef);
+    if (target) {
+      const zipPath = `attachments/${target.name}`;
+      collectedFiles.set(zipPath, target);
+      return `![${alt}](${zipPath})`;
+    }
+    return match;
+  });
+
+  // 3. Resolve diretivas %% src=... ou %% file=... em blocos canônicos
+  const enginesPattern = CANONICAL_ENGINES.join('|');
+  const blockRegex = new RegExp(`\`\`\`(${enginesPattern})\\n([\\s\\S]*?)\\n\`\`\``, 'gi');
+
+  normalizedMarkdown = normalizedMarkdown.replace(blockRegex, (match, engine, content) => {
+    const updatedContent = content.replace(/%%\s*(?:src|file)=([^\s\n]+)/g, (dirMatch, ref) => {
+      const cleanRef = ref.trim().replace(/^["']|["']$/g, '');
+      if (cleanRef.startsWith('http://') || cleanRef.startsWith('https://')) {
+        return dirMatch;
+      }
+      const target = resolveVaultFile(cleanRef);
+      if (target) {
+        const zipPath = `attachments/${target.name}`;
+        collectedFiles.set(zipPath, target);
+        return `%% src=${zipPath}`;
+      }
+      return dirMatch;
+    });
+    return `\`\`\`${engine}\n${updatedContent}\n\`\`\``;
+  });
+
+  const zipFiles = [{ name: 'main.md', data: Buffer.from(normalizedMarkdown, 'utf8') }];
+
+  for (const [zipPath, file] of collectedFiles.entries()) {
+    try {
+      const bin = await vault.readBinary(file);
+      zipFiles.push({ name: zipPath, data: Buffer.from(bin) });
+    } catch (err) {
+      console.warn(`[Joaju] Não foi possível ler anexo "${file.path}": ${err.message}`);
+    }
+  }
+
+  return packZip(zipFiles);
+}
+
 /**
  * Normaliza o payload para envio à API do Joaju.
  */
@@ -314,10 +531,17 @@ async function fetchDiagramSvg(serverUrl, source, engine, requestFn = globalThis
 
 /**
  * Dispara requisição HTTP à API /compile do Joaju para gerar PDF.
+ * Suporta tanto markdown em texto plano (JSON) quanto pacote de workspace ZIP com anexos locais.
  */
-async function compileMarkdownToPdf(serverUrl, markdown, requestFn = globalThis.fetch) {
+async function compileMarkdownToPdf(serverUrl, payload, requestFn = globalThis.fetch) {
   const normalizedUrl = (serverUrl || DEFAULT_SETTINGS.serverUrl).replace(/\/+$/, '');
   const targetEndpoint = `${normalizedUrl}/compile`;
+
+  const isBinary =
+    Buffer.isBuffer(payload) || payload instanceof Uint8Array || payload instanceof ArrayBuffer;
+
+  const contentType = isBinary ? 'application/zip' : 'application/json';
+  const body = isBinary ? payload : JSON.stringify({ markdown: payload });
 
   try {
     if (obsidian?.requestUrl && (!requestFn || requestFn === obsidian.requestUrl)) {
@@ -325,9 +549,9 @@ async function compileMarkdownToPdf(serverUrl, markdown, requestFn = globalThis.
         url: targetEndpoint,
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json'
+          'Content-Type': contentType
         },
-        body: JSON.stringify({ markdown }),
+        body,
         throw: false
       });
 
@@ -341,9 +565,9 @@ async function compileMarkdownToPdf(serverUrl, markdown, requestFn = globalThis.
     const res = await fn(targetEndpoint, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json'
+        'Content-Type': contentType
       },
-      body: JSON.stringify({ markdown })
+      body
     });
 
     if (!res.ok) {
@@ -1891,15 +2115,17 @@ class JoajuPlugin extends PluginBase {
     if (obsidian.Notice) new obsidian.Notice('⏳ Compilando artigo via Joaju...');
 
     try {
-      const rawContent = await this.app.vault.read(activeFile);
       const requestFn = obsidian.requestUrl || globalThis.fetch;
-      const content = await resolveMarkdownExternalSources(
-        rawContent,
+      const workspaceBundle = await buildMarkdownWorkspaceBundle(
+        activeFile,
         this.app?.vault,
-        activeFile.path,
+        this.app?.metadataCache
+      );
+      const pdfBuffer = await compileMarkdownToPdf(
+        this.settings.serverUrl,
+        workspaceBundle,
         requestFn
       );
-      const pdfBuffer = await compileMarkdownToPdf(this.settings.serverUrl, content, requestFn);
 
       const folderPath = activeFile.parent ? activeFile.parent.path : '';
       const pdfPath = `${folderPath && folderPath !== '/' ? `${folderPath}/` : ''}${activeFile.basename}.pdf`;
@@ -2250,3 +2476,6 @@ module.exports.createLivePreviewCardsExtension = createLivePreviewCardsExtension
 module.exports.CANONICAL_ENGINES = CANONICAL_ENGINES;
 module.exports.resolveDiagramSource = resolveDiagramSource;
 module.exports.resolveMarkdownExternalSources = resolveMarkdownExternalSources;
+module.exports.packZip = packZip;
+module.exports.calculateCrc32 = calculateCrc32;
+module.exports.buildMarkdownWorkspaceBundle = buildMarkdownWorkspaceBundle;

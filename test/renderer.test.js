@@ -7,8 +7,12 @@ const {
   fetchDiagramSvg,
   CANONICAL_ENGINES,
   resolveDiagramSource,
-  resolveMarkdownExternalSources
+  resolveMarkdownExternalSources,
+  packZip,
+  calculateCrc32,
+  buildMarkdownWorkspaceBundle
 } = require('../main.js');
+const zlib = require('node:zlib');
 
 test('Configurações Padrão (DEFAULT_SETTINGS)', () => {
   assert.ok(DEFAULT_SETTINGS.serverUrl.startsWith('http'));
@@ -49,7 +53,7 @@ test('Cache de Diagramas (createDiagramCache)', () => {
 
 test('Normalizador de Payload (buildRenderPayload)', () => {
   assert.throws(() => buildRenderPayload('', 'd2'), /vazio/);
-  assert.throws(() => buildRenderPayload('   ', 'kinship'), /vazio/);
+  assert.throws(() => buildRenderPayload('   ', 'kinship2'), /vazio/);
 
   // Código sem crases deve ser envelopado
   const bare = buildRenderPayload('x -> y: Conexao', 'd2');
@@ -57,9 +61,9 @@ test('Normalizador de Payload (buildRenderPayload)', () => {
   assert.strictEqual(bare.code, '```d2\nx -> y: Conexao\n```');
 
   // Código já envelopado deve ser preservado
-  const wrapped = buildRenderPayload('```kinship\nid,pai,mae\n1,0,0\n```', 'kinship');
-  assert.strictEqual(wrapped.engine, 'kinship');
-  assert.strictEqual(wrapped.code, '```kinship\nid,pai,mae\n1,0,0\n```');
+  const wrapped = buildRenderPayload('```kinship2\nid,pai,mae\n1,0,0\n```', 'kinship2');
+  assert.strictEqual(wrapped.engine, 'kinship2');
+  assert.strictEqual(wrapped.code, '```kinship2\nid,pai,mae\n1,0,0\n```');
 });
 
 test('Cliente HTTP (fetchDiagramSvg) - Sucesso com fetch padrão', async () => {
@@ -93,7 +97,7 @@ test('Cliente HTTP (fetchDiagramSvg) - Sucesso com Obsidian requestUrl', async (
   const svg = await fetchDiagramSvg(
     'http://localhost:3000',
     'id,pai,mae\n1,0,0',
-    'kinship',
+    'kinship2',
     mockObsidianRequest
   );
   assert.ok(svg.includes('<svg viewBox'));
@@ -457,4 +461,111 @@ a -> b
   assert.ok(processed.includes('id,pai,mae,sex'));
   assert.ok(processed.includes('```d2\na -> b\n```'));
   assert.ok(!processed.includes('https://exemplo.com/dados.csv'));
+});
+
+test('Cálculo de CRC32 (calculateCrc32)', () => {
+  assert.strictEqual(calculateCrc32(Buffer.from('')), 0);
+  assert.strictEqual(calculateCrc32(Buffer.from('123456789')), 0xcbf43926);
+  assert.strictEqual(calculateCrc32(Buffer.from('Joaju')), 1095563049);
+});
+
+test('Empacotador ZIP Zero-Dependency (packZip)', () => {
+  const files = [
+    { name: 'main.md', data: Buffer.from('# Título do Documento\nConteúdo explicativo.') },
+    { name: 'attachments/dados.csv', data: Buffer.from('id,val\n1,100\n2,200\n') }
+  ];
+
+  const zipBuffer = packZip(files);
+  assert.ok(Buffer.isBuffer(zipBuffer));
+  assert.ok(zipBuffer.length > 0);
+
+  // Assinatura do primeiro cabeçalho local (PK\x03\x04)
+  assert.strictEqual(zipBuffer.readUInt32LE(0), 0x04034b50);
+
+  // Verifica que os caminhos dos arquivos estão presentes no arquivo ZIP
+  const rawString = zipBuffer.toString('latin1');
+  assert.ok(rawString.includes('main.md'));
+  assert.ok(rawString.includes('attachments/dados.csv'));
+
+  // Assinatura de End of Central Directory (PK\x05\x06) presente no final
+  const eocdIndex = zipBuffer.lastIndexOf(Buffer.from([0x50, 0x4b, 0x05, 0x06]));
+  assert.ok(eocdIndex > 0);
+});
+
+test('Gerador de Pacote de Workspace (buildMarkdownWorkspaceBundle)', async () => {
+  const noteContent = `# Artigo Científico
+
+Diagrama e imagem:
+![[figura1.png]]
+![Gráfico Local](assets/grafico.png)
+
+\`\`\`pedtools
+%% src=arvore.csv
+%% layout.width=80%
+\`\`\`
+
+\`\`\`openchemlib
+%% file=moleculas/cafeina.mol
+\`\`\`
+`;
+
+  const fakeFiles = {
+    'anexos/figura1.png': Buffer.from('PNG_FAKE_DATA_1'),
+    'assets/grafico.png': Buffer.from('PNG_FAKE_DATA_2'),
+    'dados/arvore.csv': Buffer.from('id,fid,mid,sex\n1,0,0,1'),
+    'moleculas/cafeina.mol': Buffer.from('MOL_FAKE_DATA')
+  };
+
+  const fakeVault = {
+    read: async () => noteContent,
+    readBinary: async (file) => fakeFiles[file.path] || Buffer.from('EMPTY'),
+    getAbstractFileByPath: (p) => {
+      if (fakeFiles[p]) return { path: p, name: p.split('/').pop() };
+      return null;
+    }
+  };
+
+  const fakeMetadataCache = {
+    getFirstLinkpathDest: (linkpath) => {
+      if (linkpath === 'figura1.png') return { path: 'anexos/figura1.png', name: 'figura1.png' };
+      if (linkpath === 'assets/grafico.png')
+        return { path: 'assets/grafico.png', name: 'grafico.png' };
+      if (linkpath === 'arvore.csv') return { path: 'dados/arvore.csv', name: 'arvore.csv' };
+      if (linkpath === 'moleculas/cafeina.mol')
+        return { path: 'moleculas/cafeina.mol', name: 'cafeina.mol' };
+      return null;
+    }
+  };
+
+  const activeFile = { path: 'pasta/artigo.md', name: 'artigo.md' };
+
+  const zipBuffer = await buildMarkdownWorkspaceBundle(activeFile, fakeVault, fakeMetadataCache);
+  assert.ok(Buffer.isBuffer(zipBuffer));
+
+  const zipString = zipBuffer.toString('latin1');
+  assert.ok(zipString.includes('main.md'));
+  assert.ok(zipString.includes('attachments/figura1.png'));
+  assert.ok(zipString.includes('attachments/grafico.png'));
+  assert.ok(zipString.includes('attachments/arvore.csv'));
+  assert.ok(zipString.includes('attachments/cafeina.mol'));
+});
+
+test('Compilador de PDF (compileMarkdownToPdf) - Sucesso com payload ZIP binário', async () => {
+  const { compileMarkdownToPdf } = require('../main.js');
+  const dummyZip = packZip([{ name: 'main.md', data: Buffer.from('# Teste') }]);
+
+  const mockFetch = async (url, opts) => {
+    assert.strictEqual(url, 'http://localhost:3000/compile');
+    assert.strictEqual(opts.headers['Content-Type'], 'application/zip');
+    assert.ok(Buffer.isBuffer(opts.body) || opts.body instanceof Uint8Array);
+    return {
+      ok: true,
+      status: 200,
+      arrayBuffer: async () => new Uint8Array([37, 80, 68, 70]).buffer
+    };
+  };
+
+  const buffer = await compileMarkdownToPdf('http://localhost:3000', dummyZip, mockFetch);
+  assert.ok(buffer);
+  assert.strictEqual(buffer.byteLength, 4);
 });
