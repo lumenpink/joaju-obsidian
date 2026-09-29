@@ -1,9 +1,9 @@
 {
   "id": "joaju-obsidian",
   "name": "Joaju Live Preview",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "minAppVersion": "0.15.0",
-  "description": "Renderizador Live Preview e exportação de Kinship, D2 e PlantUML via Joaju.",
+  "description": "Renderizador Live Preview de diagramas (Kinship, D2, PlantUML) e cards tipográficos de links via Joaju.",
   "author": "Lumen Pink",
   "authorUrl": "https://lumen.pink",
   "isDesktopOnly": false

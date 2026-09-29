@@ -14,6 +14,10 @@
   "author": "Lumen Pink <hi@lumen.pink>",
   "license": "Apache-2.0",
   "devDependencies": {
-    "@biomejs/biome": "^1.9.4"
+    "@biomejs/biome": "^1.9.4",
+    "@codemirror/language": "^6.12.4",
+    "@codemirror/state": "^6.7.6",
+    "@codemirror/view": "^6.43.13",
+    "linkedom": "^0.18.13"
   }
 }

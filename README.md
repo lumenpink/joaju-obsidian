@@ -1,6 +1,6 @@
 # Joaju Live Preview (`joaju-obsidian`)
 
-Plugin oficial do [Obsidian](https://obsidian.md) para o ecossistema **Joaju**, fornecendo renderização instantânea (Live Preview e Reading View) para heredogramas clínicos e diagramas técnicos diretamente nas suas notas.
+Plugin oficial do [Obsidian](https://obsidian.md) para o ecossistema **Joaju**, fornecendo renderização instantânea (Live Preview e Reading View) para heredogramas clínicos, diagramas técnicos e cards tipográficos de links diretamente nas suas notas.
 
 O **joaju-obsidian** fecha o elo de **paridade total (WYSIWYG)**: o mesmo diagrama vetorial que você visualiza enquanto digita na nota é o que será compilado no PDF final com tipografia acadêmica (Typst/ABNT/Vancouver).
 
@@ -11,6 +11,7 @@ O **joaju-obsidian** fecha o elo de **paridade total (WYSIWYG)**: o mesmo diagra
 - **🧬 Kinship Clínico (`kinship`, `kinship2`, `heredograma`, `pedigree`):** Renderiza heredogramas genealógicos completos segundo o padrão Bennett 2008 (`kinship2` em R).
 - **📐 D2 Declarativo (`d2`):** Diagramação moderna de fluxos, arquiteturas e tabelas SQL com layout de alta legibilidade.
 - **🏗️ PlantUML (`plantuml`, `puml`):** Diagramas formais de sequência, classes, estados, atividades e cronogramas.
+- **📇 Cards Tipográficos de Links:** Links isolados na linha são automaticamente expandidos em cards ricos com título, imagem de capa, snippet, domínio e tempo de leitura — sem Chromium, usando Readability no backend.
 - **📄 Compilação Nativa de Artigos (PDF):** Envia a nota Markdown atual para compilação no Joaju e salva o PDF resultante diretamente na mesma pasta da nota.
 - **🦊 Integração com Fuxico (Pastebin):**
   - **Compilar & Fuxicar PDF:** Compila o PDF e faz upload imediato para sua instância Fuxico, adicionando o link (`fuxico_pdf`) e a tag `fuxico` ao frontmatter, com a URL copiada para a área de transferência.
@@ -56,6 +57,8 @@ Acesse **Configurações > Joaju Live Preview**:
 * **Branch / Canal:** Branch de busca (`main`).
 * **Verificar atualizações ao iniciar:** Checagem autônoma em segundo plano ao abrir o Obsidian.
 * **Botão "Verificar agora":** Consulta o Codeberg e atualiza o plugin diretamente pela UI do Obsidian em 1 clique (com hot-reload imediato).
+* **📇 Habilitar Cards de Links:** Ativa a expansão automática de links isolados em cards tipográficos (padrão: ativado).
+* **Pasta de Anexos para Cards:** Caminho relativo ao vault onde imagens de capa e snapshots PDF são salvos (padrão: `_attachments/cards`).
 
 ---
 
@@ -68,12 +71,50 @@ Pela paleta de comandos (`Ctrl+P` / `Cmd+P`) ou ícone da barra lateral (ribbon)
 3. **Joaju: Publicar Markdown no Fuxico**
 4. **Joaju: Sincronizar Zotero (Tatupeba)**
 5. **Joaju: Verificar atualizações no Codeberg**
+6. **Joaju: Preencher título do link na linha atual (!title / !url)** — busca o título real da URL e converte `!https://url` ou `[!title](url)` em `[Título](url)` na linha do cursor.
+7. **Joaju: Recarregar todos os cards desta nota** — limpa o cache dos links isolados da nota ativa; ao reabrir em modo Leitura os cards são re-buscados.
 
 ---
 
 ## ✍️ Exemplos de Uso
 
-### 1. Heredograma Clínico (`kinship`)
+### 1. Cards Tipográficos de Links
+
+**Atalho direto e preenchimento automático** — escreva a URL com `!` na frente, em uma linha isolada:
+
+```markdown
+!https://example.com/artigo-legal
+```
+
+Ao pressionar `Enter` ou mudar de linha, o plugin consulta o Joaju em segundo plano e converte a linha no arquivo Markdown automaticamente para:
+
+```markdown
+[Título Real do Artigo](https://example.com/artigo-legal)
+```
+
+No **Live Preview (modo edição)**, assim que o cursor sai da linha, o link isolado se transforma imediatamente em um **Card Tipográfico rico**. Se você mover o cursor para a linha ou clicar no botão `✏️`, o card se recolhe mostrando o Markdown puro para edição.
+
+Também suporta a sintaxe explícita com preenchimento automático ao sair da linha:
+
+```markdown
+[!title](https://example.com/artigo-legal)
+```
+
+**Suprimir card individual** — adicione `<!-- nocard -->` na mesma linha:
+
+```markdown
+[Link que não vira card](https://example.com) <!-- nocard -->
+```
+
+**Desabilitar cards em uma nota inteira** — no frontmatter:
+
+```yaml
+---
+cards: false
+---
+```
+
+### 2. Heredograma Clínico (`kinship`)
 
 ````markdown
 ```kinship
@@ -86,7 +127,7 @@ II:2, I:1, I:2,  M,   higido,        0,        0,   35a, Irmão
 ```
 ````
 
-### 2. Fluxograma Moderno (`d2`)
+### 3. Fluxograma Moderno (`d2`)
 
 ````markdown
 ```d2
@@ -97,7 +138,7 @@ analise -> laudo: Laudo Médico
 ```
 ````
 
-### 3. Diagrama de Sequência (`plantuml`)
+### 4. Diagrama de Sequência (`plantuml`)
 
 ````markdown
 ```plantuml

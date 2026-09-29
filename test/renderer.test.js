@@ -4,7 +4,10 @@ const {
   DEFAULT_SETTINGS,
   createDiagramCache,
   buildRenderPayload,
-  fetchDiagramSvg
+  fetchDiagramSvg,
+  CANONICAL_ENGINES,
+  resolveDiagramSource,
+  resolveMarkdownExternalSources
 } = require('../main.js');
 
 test('Configurações Padrão (DEFAULT_SETTINGS)', () => {
@@ -292,4 +295,138 @@ test('Sincronizador Zotero Tatupeba (syncZoteroWithTatupeba) - Erro 401 Não aut
     async () => syncZoteroWithTatupeba('http://localhost:3001', 'errado', mockObsidian401),
     /Não autorizado/
   );
+});
+
+test('Upload para Fuxico (uploadToFuxico) - Sucesso com Obsidian requestUrl', async () => {
+  const { uploadToFuxico } = require('../main.js');
+
+  const mockRequestUrl = async (urlOrOptions, maybeOptions) => {
+    const opts = typeof urlOrOptions === 'string' ? maybeOptions : urlOrOptions;
+    assert.strictEqual(opts.method, 'POST');
+    assert.ok(opts.headers['Content-Type'].startsWith('multipart/form-data; boundary='));
+    assert.strictEqual(opts.headers.Authorization, 'Bearer token_teste');
+    assert.ok(opts.body);
+    return {
+      status: 200,
+      text: 'https://2lp.in/abcde.md\n'
+    };
+  };
+
+  const url = await uploadToFuxico(
+    'https://2lp.in',
+    'token_teste',
+    'nota.md',
+    '# Conteudo da nota',
+    'text/markdown',
+    mockRequestUrl
+  );
+
+  assert.strictEqual(url, 'https://2lp.in/abcde.md');
+});
+
+test('Upload para Fuxico (uploadToFuxico) - Erro HTTP no upload', async () => {
+  const { uploadToFuxico } = require('../main.js');
+
+  const mockRequestUrlError = async () => ({
+    status: 403,
+    text: 'Forbidden'
+  });
+
+  await assert.rejects(
+    async () =>
+      uploadToFuxico(
+        'https://2lp.in',
+        'token_invalido',
+        'nota.md',
+        'conteudo',
+        'text/markdown',
+        mockRequestUrlError
+      ),
+    /Erro 403 no Fuxico/
+  );
+});
+
+test('Motores Canônicos (CANONICAL_ENGINES)', () => {
+  assert.deepStrictEqual(CANONICAL_ENGINES, ['pedtools', 'kinship2', 'd2', 'plantuml', 'graphviz']);
+  assert.strictEqual(new Set(CANONICAL_ENGINES).size, CANONICAL_ENGINES.length);
+  assert.strictEqual(CANONICAL_ENGINES.includes('kinship'), false);
+  assert.strictEqual(CANONICAL_ENGINES.includes('heredograma'), false);
+  assert.strictEqual(CANONICAL_ENGINES.includes('pedigree'), false);
+  assert.strictEqual(CANONICAL_ENGINES.includes('puml'), false);
+});
+
+test('Resolução de Fontes Externas (resolveDiagramSource)', async () => {
+  const normalCode = 'id,pai,mae,sex\n1,0,0,1';
+  assert.strictEqual(await resolveDiagramSource(normalCode), normalCode);
+
+  const remoteCode = '%% layout.width=80%\n%% src="https://dados.org/familia.csv"\n%% cex=0.9';
+  const mockFetch = async (url) => {
+    assert.strictEqual(url, 'https://dados.org/familia.csv');
+    return {
+      text: async () => 'id,pai,mae,sex,afetado\n1,0,0,1,1\n2,0,0,2,0'
+    };
+  };
+
+  const resolvedRemote = await resolveDiagramSource(remoteCode, null, '', mockFetch);
+  assert.ok(resolvedRemote.includes('%% layout.width=80%'));
+  assert.ok(resolvedRemote.includes('%% cex=0.9'));
+  assert.ok(!resolvedRemote.includes('src='));
+  assert.ok(resolvedRemote.includes('id,pai,mae,sex,afetado'));
+
+  const localCode = '%% layout.width=70%\n%% file=pedigrees/familia1.csv';
+  const fakeVault = {
+    getAbstractFileByPath: (p) => (p === 'pedigrees/familia1.csv' ? { path: p } : null),
+    read: async () => 'id,pai,mae,sex\n10,0,0,1'
+  };
+
+  const resolvedLocal = await resolveDiagramSource(localCode, fakeVault, 'nota.md');
+  assert.ok(resolvedLocal.includes('%% layout.width=70%'));
+  assert.ok(!resolvedLocal.includes('file='));
+  assert.ok(resolvedLocal.includes('id,pai,mae,sex\n10,0,0,1'));
+
+  const wikilinkCode = '%% src=[[tabela.csv]]';
+  const fakeVaultWiki = {
+    getAbstractFileByPath: () => null,
+    getFirstLinkpathDest: (p) => (p === 'tabela.csv' ? { path: 'anexos/tabela.csv' } : null),
+    read: async () => 'id,pai,mae\n1,0,0'
+  };
+  const resolvedWiki = await resolveDiagramSource(wikilinkCode, fakeVaultWiki, 'pasta/nota.md');
+  assert.ok(resolvedWiki.includes('id,pai,mae\n1,0,0'));
+
+  const fakeVaultEmpty = {
+    getAbstractFileByPath: () => null,
+    getFirstLinkpathDest: () => null,
+    getFiles: () => []
+  };
+  await assert.rejects(
+    () => resolveDiagramSource('%% src=nao_existe.csv', fakeVaultEmpty, 'nota.md'),
+    /Arquivo referenciado em %% src não encontrado no cofre/
+  );
+});
+
+test('Resolução em Documento Markdown Completo (resolveMarkdownExternalSources)', async () => {
+  const doc = `
+# Relatório Genético
+
+\`\`\`pedtools
+%% src="https://exemplo.com/dados.csv"
+%% layout.width=85%
+\`\`\`
+
+Texto intermediário.
+
+\`\`\`d2
+a -> b
+\`\`\`
+`;
+
+  const mockFetch = async () => ({
+    text: async () => 'id,pai,mae,sex\n1,0,0,M'
+  });
+
+  const processed = await resolveMarkdownExternalSources(doc, null, '', mockFetch);
+  assert.ok(processed.includes('```pedtools'));
+  assert.ok(processed.includes('id,pai,mae,sex'));
+  assert.ok(processed.includes('```d2\na -> b\n```'));
+  assert.ok(!processed.includes('https://exemplo.com/dados.csv'));
 });
