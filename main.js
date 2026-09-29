@@ -6,9 +6,11 @@ try {
 }
 
 const DEFAULT_SETTINGS = {
-  serverUrl: 'http://baquara:3000',
-  fuxicoUrl: 'https://2lp.in',
-  fuxicoToken: 'juruping4',
+  serverUrl: 'http://localhost:3000',
+  fuxicoUrl: 'http://localhost:8080',
+  fuxicoToken: '',
+  tatupebaUrl: 'http://localhost:3001',
+  tatupebaToken: '',
   debounceMs: 400,
   codebergRepo: 'lumenpink/joaju-obsidian',
   codebergBranch: 'main',
@@ -375,6 +377,66 @@ async function downloadCodebergPluginFiles(repo, branch, requestFn) {
   return downloaded;
 }
 
+/**
+ * Dispara a sincronização de referências Zotero no daemon Tatupeba.
+ */
+async function syncZoteroWithTatupeba(tatupebaUrl, token, requestFn = globalThis.fetch) {
+  const cleanUrl = (tatupebaUrl || DEFAULT_SETTINGS.tatupebaUrl).replace(/\/+$/, '');
+  const url = `${cleanUrl}/sync`;
+  const headers = { 'Content-Type': 'application/json' };
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+    headers['X-Api-Key'] = token;
+  }
+
+  if (requestFn && requestFn !== globalThis.fetch) {
+    let res;
+    try {
+      res = await requestFn({ url, method: 'POST', headers });
+    } catch (err) {
+      if (err?.status === 401) {
+        throw new Error('Não autorizado: chave/token do Tatupeba inválido ou ausente');
+      }
+      try {
+        res = await requestFn(url, { method: 'POST', headers });
+      } catch (innerErr) {
+        if (innerErr?.status === 401) {
+          throw new Error('Não autorizado: chave/token do Tatupeba inválido ou ausente');
+        }
+        throw innerErr;
+      }
+    }
+
+    if (res?.status === 401 || (res?.ok === false && res?.status === 401)) {
+      throw new Error('Não autorizado: chave/token do Tatupeba inválido ou ausente');
+    }
+    if (res?.status && res.status >= 400) {
+      const errText = typeof res.text === 'function' ? await res.text() : res.text || '';
+      throw new Error(`Falha na API Tatupeba (${res.status}): ${errText}`);
+    }
+
+    if (res?.json && typeof res.json === 'function') {
+      return await res.json();
+    }
+    if (typeof res?.text === 'string') {
+      return JSON.parse(res.text || '{}');
+    }
+    if (typeof res?.json === 'object') {
+      return res.json;
+    }
+  }
+
+  const res = await fetch(url, { method: 'POST', headers });
+  if (!res.ok) {
+    if (res.status === 401) {
+      throw new Error('Não autorizado: chave/token do Tatupeba inválido ou ausente');
+    }
+    const errText = await res.text();
+    throw new Error(`Falha na API Tatupeba (${res.status}): ${errText}`);
+  }
+  return await res.json();
+}
+
 const PluginBase = obsidian.Plugin || class {};
 const PluginSettingTabBase = obsidian.PluginSettingTab || class {};
 
@@ -388,7 +450,7 @@ class JoajuSettingTab extends PluginSettingTabBase {
     const { containerEl } = this;
     containerEl.empty();
 
-    containerEl.createEl('h2', { text: 'Configurações do Joaju & Fuxico' });
+    containerEl.createEl('h2', { text: 'Configurações do Ecossistema Joaju' });
 
     if (!obsidian.Setting) return;
 
@@ -404,6 +466,49 @@ class JoajuSettingTab extends PluginSettingTabBase {
             await this.plugin.saveSettings();
           })
       );
+
+    containerEl.createEl('h3', { text: '🐾 Tatupeba (Sincronização Zotero)' });
+
+    new obsidian.Setting(containerEl)
+      .setName('Servidor Tatupeba (URL)')
+      .setDesc('Endereço do daemon Tatupeba para sincronização contínua do Zotero.')
+      .addText((text) =>
+        text
+          .setPlaceholder(DEFAULT_SETTINGS.tatupebaUrl)
+          .setValue(this.plugin.settings.tatupebaUrl)
+          .onChange(async (value) => {
+            this.plugin.settings.tatupebaUrl = value.trim() || DEFAULT_SETTINGS.tatupebaUrl;
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new obsidian.Setting(containerEl)
+      .setName('Token de Autenticação Tatupeba')
+      .setDesc('Chave de segurança (Bearer / X-Api-Key) configurada no daemon.')
+      .addText((text) =>
+        text
+          .setPlaceholder('Chave de segurança (opcional)')
+          .setValue(this.plugin.settings.tatupebaToken)
+          .onChange(async (value) => {
+            this.plugin.settings.tatupebaToken = value.trim();
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new obsidian.Setting(containerEl)
+      .setName('Sincronizar Zotero Agora')
+      .setDesc('Dispara manualmente a extração de notas e referências BibTeX do Zotero.')
+      .addButton((btn) =>
+        btn.setButtonText('Sincronizar agora').onClick(async () => {
+          btn.setButtonText('Sincronizando...');
+          btn.setDisabled(true);
+          await this.plugin.triggerTatupebaSync();
+          btn.setDisabled(false);
+          btn.setButtonText('Sincronizar agora');
+        })
+      );
+
+    containerEl.createEl('h3', { text: '🦊 Fuxico (Compartilhamento & Pastebin)' });
 
     new obsidian.Setting(containerEl)
       .setName('Servidor Fuxico (URL)')
@@ -423,7 +528,7 @@ class JoajuSettingTab extends PluginSettingTabBase {
       .setDesc('Ficha/chave de autorização Bearer para upload no Fuxico.')
       .addText((text) =>
         text
-          .setPlaceholder(DEFAULT_SETTINGS.fuxicoToken)
+          .setPlaceholder('Chave Bearer (opcional)')
           .setValue(this.plugin.settings.fuxicoToken)
           .onChange(async (value) => {
             this.plugin.settings.fuxicoToken = value.trim() || DEFAULT_SETTINGS.fuxicoToken;
@@ -568,6 +673,14 @@ class JoajuPlugin extends PluginBase {
         name: 'Fuxicar nota atual (Markdown puro)',
         callback: async () => {
           await this.publishCurrentNoteToFuxico();
+        }
+      });
+
+      this.addCommand({
+        id: 'sync-zotero',
+        name: 'Sincronizar Zotero (Tatupeba)',
+        callback: async () => {
+          await this.triggerTatupebaSync();
         }
       });
 
@@ -775,6 +888,39 @@ class JoajuPlugin extends PluginBase {
     await this.saveData(this.settings);
   }
 
+  async triggerTatupebaSync() {
+    if (obsidian.Notice)
+      new obsidian.Notice('🐾 [Tatupeba] Sincronizando referências com o Zotero...');
+    try {
+      const requestFn = obsidian.requestUrl || globalThis.fetch;
+      const data = await syncZoteroWithTatupeba(
+        this.settings.tatupebaUrl || DEFAULT_SETTINGS.tatupebaUrl,
+        this.settings.tatupebaToken || '',
+        requestFn
+      );
+
+      if (data?.ok && data.summary) {
+        if (obsidian.Notice) {
+          new obsidian.Notice(
+            `✅ Tatupeba: ${data.summary.notesWritten || 0} notas no Obsidian e ${data.summary.bibEntries || 0} referências no Joaju sincronizadas!`,
+            8000
+          );
+        }
+      } else {
+        if (obsidian.Notice) {
+          new obsidian.Notice(
+            `⚠️ Tatupeba: ${data?.error || 'Resposta sem resumo de sincronização'}`,
+            6000
+          );
+        }
+      }
+    } catch (err) {
+      if (obsidian.Notice) {
+        new obsidian.Notice(`❌ Erro no Tatupeba: ${err.message}`, 10000);
+      }
+    }
+  }
+
   async checkForUpdates(silent = false) {
     try {
       const currentVer = this.manifest?.version || '0.1.0';
@@ -874,3 +1020,4 @@ module.exports.updateFrontmatterString = updateFrontmatterString;
 module.exports.isNewerVersion = isNewerVersion;
 module.exports.checkCodebergUpdate = checkCodebergUpdate;
 module.exports.downloadCodebergPluginFiles = downloadCodebergPluginFiles;
+module.exports.syncZoteroWithTatupeba = syncZoteroWithTatupeba;

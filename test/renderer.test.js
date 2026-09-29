@@ -134,18 +134,18 @@ test('Cliente HTTP (fetchDiagramSvg) - Falha de conexão de rede', async () => {
 });
 
 test('Configurações Fuxico (DEFAULT_SETTINGS)', () => {
-  assert.ok(DEFAULT_SETTINGS.fuxicoUrl.startsWith('https://'));
-  assert.ok(DEFAULT_SETTINGS.fuxicoToken.length > 0);
+  assert.ok(DEFAULT_SETTINGS.fuxicoUrl.startsWith('http'));
+  assert.strictEqual(typeof DEFAULT_SETTINGS.fuxicoToken, 'string');
 });
 
 test('Atualizador de Frontmatter (updateFrontmatterString)', () => {
   // Nota sem frontmatter
   const rawWithoutFm = '# Meu Artigo\n\nConteúdo aqui.';
   const updated1 = require('../main.js').updateFrontmatterString(rawWithoutFm, {
-    pdfUrl: 'https://2lp.in/12345.pdf'
+    pdfUrl: 'http://localhost:8080/12345.pdf'
   });
   assert.ok(updated1.startsWith('---\n'));
-  assert.ok(updated1.includes('fuxico_pdf: https://2lp.in/12345.pdf'));
+  assert.ok(updated1.includes('fuxico_pdf: http://localhost:8080/12345.pdf'));
   assert.ok(updated1.includes('tags:\n  - fuxico'));
 
   // Nota com frontmatter existente
@@ -157,19 +157,19 @@ tags:
 
 # Teste`;
   const updated2 = require('../main.js').updateFrontmatterString(rawWithFm, {
-    pdfUrl: 'https://2lp.in/pdf1.pdf',
-    mdUrl: 'https://2lp.in/md1.md'
+    pdfUrl: 'http://localhost:8080/pdf1.pdf',
+    mdUrl: 'http://localhost:8080/md1.md'
   });
   assert.ok(updated2.includes('title: Teste'));
-  assert.ok(updated2.includes('fuxico_pdf: https://2lp.in/pdf1.pdf'));
-  assert.ok(updated2.includes('fuxico_md: https://2lp.in/md1.md'));
+  assert.ok(updated2.includes('fuxico_pdf: http://localhost:8080/pdf1.pdf'));
+  assert.ok(updated2.includes('fuxico_md: http://localhost:8080/md1.md'));
   assert.ok(updated2.includes('  - fuxico'));
 });
 
 test('Compilador de PDF (compileMarkdownToPdf) - Sucesso com fetch padrão', async () => {
   const { compileMarkdownToPdf } = require('../main.js');
   const mockFetch = async (url, opts) => {
-    assert.strictEqual(url, 'http://baquara:3000/compile');
+    assert.strictEqual(url, 'http://localhost:3000/compile');
     return {
       ok: true,
       status: 200,
@@ -177,7 +177,7 @@ test('Compilador de PDF (compileMarkdownToPdf) - Sucesso com fetch padrão', asy
     };
   };
 
-  const buffer = await compileMarkdownToPdf('http://baquara:3000', '# Artigo', mockFetch);
+  const buffer = await compileMarkdownToPdf('http://localhost:3000', '# Artigo', mockFetch);
   assert.ok(buffer);
   assert.strictEqual(buffer.byteLength, 4);
 });
@@ -251,4 +251,45 @@ test('Download de Arquivos do Plugin (downloadCodebergPluginFiles)', async () =>
   assert.strictEqual(files['manifest.json'], '{"id":"joaju-obsidian"}');
   assert.strictEqual(files['main.js'], 'console.log("hello");');
   assert.strictEqual(files['styles.css'], '.body {}');
+});
+
+test('Sincronizador Zotero Tatupeba (syncZoteroWithTatupeba) - Sucesso com token', async () => {
+  const { syncZoteroWithTatupeba } = require('../main.js');
+
+  const mockObsidianRequest = async (opts) => {
+    assert.strictEqual(opts.url, 'http://localhost:3001/sync');
+    assert.strictEqual(opts.headers.Authorization, 'Bearer chave_secreta');
+    assert.strictEqual(opts.headers['X-Api-Key'], 'chave_secreta');
+    return {
+      status: 200,
+      json: {
+        ok: true,
+        summary: { notesWritten: 5, bibEntries: 12 }
+      }
+    };
+  };
+
+  const res = await syncZoteroWithTatupeba(
+    'http://localhost:3001',
+    'chave_secreta',
+    mockObsidianRequest
+  );
+  assert.strictEqual(res.ok, true);
+  assert.strictEqual(res.summary.notesWritten, 5);
+  assert.strictEqual(res.summary.bibEntries, 12);
+});
+
+test('Sincronizador Zotero Tatupeba (syncZoteroWithTatupeba) - Erro 401 Não autorizado', async () => {
+  const { syncZoteroWithTatupeba } = require('../main.js');
+
+  const mockObsidian401 = async () => {
+    const err = new Error('Unauthorized');
+    err.status = 401;
+    throw err;
+  };
+
+  await assert.rejects(
+    async () => syncZoteroWithTatupeba('http://localhost:3001', 'errado', mockObsidian401),
+    /Não autorizado/
+  );
 });

@@ -13,12 +13,13 @@ O **joaju-obsidian** fecha o elo de **paridade total (WYSIWYG)**: o mesmo diagra
 - **🏗️ PlantUML (`plantuml`, `puml`):** Diagramas formais de sequência, classes, estados, atividades e cronogramas.
 - **📄 Compilação Nativa de Artigos (PDF):** Envia a nota Markdown atual para compilação no Joaju e salva o PDF resultante diretamente na mesma pasta da nota.
 - **🦊 Integração com Fuxico (Pastebin):**
-  - **Compilar & Fuxicar PDF:** Compila o PDF e faz upload imediato para o Fuxico (`https://2lp.in`), adicionando o link (`fuxico_pdf`) e a tag `fuxico` ao frontmatter, com a URL copiada para a área de transferência.
+  - **Compilar & Fuxicar PDF:** Compila o PDF e faz upload imediato para sua instância Fuxico, adicionando o link (`fuxico_pdf`) e a tag `fuxico` ao frontmatter, com a URL copiada para a área de transferência.
   - **Fuxicar Markdown:** Publica o arquivo Markdown bruto no Fuxico, registrando `fuxico_md` e tag `fuxico` no frontmatter.
+- **🐾 Sincronização Bibliográfica Nativa (Tatupeba):** Gatilho em 1 clique para extrair referências, anotações de leitura em PDFs e o arquivo BibTeX do Zotero via daemon conteinerizado.
 - **⚡ Cache em Memória LRU:** Re-renderização a 0ms ao rolar ou alternar notas.
 - **⏳ Debounce Configurável:** Digite suavemente sem travar o editor nem sobrecarregar o servidor.
 - **🛡️ Tratamento Gracioso de Erros:** Avisos discretos inline caso haja erro de sintaxe, sem quebrar o layout da nota.
-- **🔒 Soberania de Dados:** Conecta diretamente aos seus servidores Joaju e Fuxico.
+- **🔒 Soberania de Dados:** Conecta diretamente aos seus servidores locais/VPN (Joaju, Tatupeba e Fuxico).
 
 ---
 
@@ -45,9 +46,11 @@ npm run deploy
 
 Acesse **Configurações > Joaju Live Preview**:
 
-* **Servidor Joaju (URL):** Endereço da API Joaju (padrão: `http://baquara:3000`).
+* **Servidor Joaju (URL):** Endereço da API Joaju (padrão: `http://localhost:3000`).
+* **Servidor Tatupeba (URL):** Endereço do daemon Tatupeba para sincronização de referências Zotero (padrão: `http://localhost:3001`).
+* **Token de Autenticação Tatupeba:** Chave de segurança para sincronização via webhook (Bearer / X-Api-Key).
 * **Debounce (ms):** Tempo de espera (padrão: `400ms`) antes de renderizar diagramas.
-* **Servidor Fuxico (URL):** Instância Fuxico para publicação (padrão: `https://2lp.in`).
+* **Servidor Fuxico (URL):** Instância Fuxico para publicação (padrão: `http://localhost:8080`).
 * **Token de Autenticação Fuxico:** Chave de API Bearer para envio de arquivos.
 * **Repositório Codeberg:** Repositório canônico (`lumenpink/joaju-obsidian`).
 * **Branch / Canal:** Branch de busca (`main`).
@@ -63,7 +66,8 @@ Pela paleta de comandos (`Ctrl+P` / `Cmd+P`) ou ícone da barra lateral (ribbon)
 1. **Joaju: Compilar nota atual para PDF**
 2. **Joaju: Compilar e publicar PDF no Fuxico**
 3. **Joaju: Publicar Markdown no Fuxico**
-4. **Joaju: Verificar atualizações no Codeberg**
+4. **Joaju: Sincronizar Zotero (Tatupeba)**
+5. **Joaju: Verificar atualizações no Codeberg**
 
 ---
 
