@@ -70,7 +70,16 @@ function createDiagramCache(maxEntries = 100) {
 /**
  * Lista canônica e estrita de motores suportados pelo Joaju (sem tags duplicadas).
  */
-const CANONICAL_ENGINES = ['pedtools', 'kinship2', 'd2', 'plantuml', 'graphviz'];
+const CANONICAL_ENGINES = [
+  'pedtools',
+  'kinship2',
+  'd2',
+  'plantuml',
+  'graphviz',
+  'openchemlib',
+  'openbabel',
+  'table'
+];
 
 /**
  * Extrai e resolve fonte de dados externa em blocos de diagramas (%% src=... ou %% file=...).
@@ -284,13 +293,20 @@ async function fetchDiagramSvg(serverUrl, source, engine, requestFn = globalThis
     const parsed = JSON.parse(responseText);
     if (parsed.svg) {
       svgContent = parsed.svg;
+    } else if (parsed.html) {
+      return parsed.html;
     }
   } catch {
     // Mantém responseText original
   }
 
-  if (!svgContent.includes('<svg') && !svgContent.includes('<?xml')) {
-    throw new Error('Servidor Joaju respondeu sem SVG válido.');
+  if (
+    !svgContent.includes('<svg') &&
+    !svgContent.includes('<?xml') &&
+    !svgContent.includes('<table') &&
+    !svgContent.includes('joaju-academic-table')
+  ) {
+    throw new Error('Servidor Joaju respondeu sem SVG ou HTML válido.');
   }
 
   return svgContent;

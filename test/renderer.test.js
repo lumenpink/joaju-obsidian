@@ -99,6 +99,25 @@ test('Cliente HTTP (fetchDiagramSvg) - Sucesso com Obsidian requestUrl', async (
   assert.ok(svg.includes('<svg viewBox'));
 });
 
+test('Cliente HTTP (fetchDiagramSvg) - Sucesso com resposta HTML de tabela acadêmica', async () => {
+  const mockTableFetch = async () => ({
+    status: 200,
+    text: JSON.stringify({
+      format: 'table',
+      type: 'html',
+      html: '<div class="joaju-academic-table-wrapper"><table class="joaju-academic-table"></table></div>'
+    })
+  });
+
+  const html = await fetchDiagramSvg(
+    'http://localhost:3000',
+    'Col1, Col2\n1, 2',
+    'table',
+    mockTableFetch
+  );
+  assert.ok(html.includes('class="joaju-academic-table"'));
+});
+
 test('Cliente HTTP (fetchDiagramSvg) - Erro de compilação da API (422/500)', async () => {
   const mockErrorFetch = async () => ({
     ok: false,
@@ -121,7 +140,7 @@ test('Cliente HTTP (fetchDiagramSvg) - Resposta sem SVG válido', async () => {
 
   await assert.rejects(
     () => fetchDiagramSvg('http://localhost:3000', 'a -> b', 'd2', mockInvalidSvgFetch),
-    /sem SVG válido/
+    /sem SVG ou HTML válido/
   );
 });
 
@@ -347,7 +366,16 @@ test('Upload para Fuxico (uploadToFuxico) - Erro HTTP no upload', async () => {
 });
 
 test('Motores Canônicos (CANONICAL_ENGINES)', () => {
-  assert.deepStrictEqual(CANONICAL_ENGINES, ['pedtools', 'kinship2', 'd2', 'plantuml', 'graphviz']);
+  assert.deepStrictEqual(CANONICAL_ENGINES, [
+    'pedtools',
+    'kinship2',
+    'd2',
+    'plantuml',
+    'graphviz',
+    'openchemlib',
+    'openbabel',
+    'table'
+  ]);
   assert.strictEqual(new Set(CANONICAL_ENGINES).size, CANONICAL_ENGINES.length);
   assert.strictEqual(CANONICAL_ENGINES.includes('kinship'), false);
   assert.strictEqual(CANONICAL_ENGINES.includes('heredograma'), false);
