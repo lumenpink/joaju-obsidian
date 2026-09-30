@@ -13,7 +13,7 @@ O **joaju-obsidian** fecha o elo de **paridade total (WYSIWYG)**: o mesmo diagra
 - **📊 Tabelas Acadêmicas (`table`):** Tabelas formatadas com réguas horizontais APA/ABNT a partir de dados tabulares ou arquivos `.csv`.
 - **📐 D2 Declarativo (`d2`):** Diagramação moderna de fluxos, arquiteturas e tabelas SQL com layout de alta legibilidade.
 - **🏗️ PlantUML & Graphviz (`plantuml`, `graphviz`, `mermaid`):** Diagramas formais de sequência, classes, estados, atividades e grafos de dependência.
-- **📦 Empacotamento de Workspace (ZIP):** Ao compilar a nota para PDF, o plugin cria um pacote ZIP em memória contendo a nota e todos os anexos locais (imagens, CSVs, MOLs), garantindo compilação fidedigna sem inchaço de Base64.
+- **📦 Empacotamento de Workspace (ZIP):** Ao compilar a nota para PDF, o plugin cria um pacote ZIP em memória contendo a nota e todos os anexos locais (imagens, CSVs, MOLs), resolvendo wikilinks do Obsidian (`![[foto.png]]`, `![[imagem.png|400]]`), normalizando nomes com caracteres especiais (`_`) e prevenindo colisões de nomes idênticos entre pastas distintas com desambiguação automática.
 - **📇 Cards Tipográficos de Links:** Links isolados na linha são automaticamente expandidos em cards ricos com título, imagem de capa, snippet, domínio e tempo de leitura — sem Chromium, usando Readability no backend.
 - **📄 Compilação Nativa de Artigos (PDF):** Envia a nota Markdown atual para compilação no Joaju e salva o PDF resultante diretamente na mesma pasta da nota.
 - **🦊 Integração com Fuxico (Pastebin):**
