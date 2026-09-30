@@ -336,6 +336,8 @@ async function buildMarkdownWorkspaceBundle(activeFile, vault, metadataCache = n
 
   const rawContent = await vault.read(activeFile);
   const sourcePath = activeFile.path || '';
+  const vaultPathToZipPath = new Map();
+  const usedZipPaths = new Set();
   const collectedFiles = new Map();
   let normalizedMarkdown = rawContent;
 
@@ -355,16 +357,55 @@ async function buildMarkdownWorkspaceBundle(activeFile, vault, metadataCache = n
     return target;
   };
 
-  // 1. Resolve Wikilinks de mídia: ![[imagem.png]] ou ![[imagem.png|legenda]]
+  const allocateZipPath = (target) => {
+    const key = target.path || target.name;
+    if (vaultPathToZipPath.has(key)) {
+      return vaultPathToZipPath.get(key);
+    }
+
+    const baseName = target.name;
+    let candidate = `attachments/${baseName}`;
+
+    if (usedZipPaths.has(candidate)) {
+      const parts = (target.path || '').split('/').filter(Boolean);
+      const parentDir =
+        parts.length > 1 ? parts[parts.length - 2].replace(/[^a-zA-Z0-9_-]/g, '_') : '';
+      if (parentDir) {
+        candidate = `attachments/${parentDir}_${baseName}`;
+      }
+
+      let counter = 2;
+      const dotIndex = baseName.lastIndexOf('.');
+      const namePart = dotIndex !== -1 ? baseName.substring(0, dotIndex) : baseName;
+      const extPart = dotIndex !== -1 ? baseName.substring(dotIndex) : '';
+      while (usedZipPaths.has(candidate)) {
+        candidate = `attachments/${namePart}_${counter}${extPart}`;
+        counter++;
+      }
+    }
+
+    usedZipPaths.add(candidate);
+    vaultPathToZipPath.set(key, candidate);
+    collectedFiles.set(candidate, target);
+    return candidate;
+  };
+
+  // 1. Resolve Wikilinks de mídia: ![[imagem.png]] ou ![[imagem.png|legenda]] ou ![[imagem.png|400]]
   const wikiRegex = /!\[\[([^\]|#]+)(?:#[^\]|]*)?(?:\|([^\]]*))?\]\]/g;
   normalizedMarkdown = normalizedMarkdown.replace(wikiRegex, (match, ref, alias) => {
     const cleanRef = ref.trim();
     const target = resolveVaultFile(cleanRef);
     if (target) {
-      const zipPath = `attachments/${target.name}`;
-      collectedFiles.set(zipPath, target);
-      const label = alias ? alias.trim() : target.basename;
-      return `![${label}](${zipPath})`;
+      const zipPath = allocateZipPath(target);
+      if (!alias || !alias.trim()) {
+        return `![](${zipPath})`;
+      }
+      const trimmedAlias = alias.trim();
+      const dimMatch = trimmedAlias.match(/^(\d+)(?:x\d+)?$/);
+      if (dimMatch) {
+        return `![](${zipPath}){width=${dimMatch[1]}pt}`;
+      }
+      return `![${trimmedAlias}](${zipPath})`;
     }
     return match;
   });
@@ -376,14 +417,14 @@ async function buildMarkdownWorkspaceBundle(activeFile, vault, metadataCache = n
     if (
       cleanRef.startsWith('http://') ||
       cleanRef.startsWith('https://') ||
-      cleanRef.startsWith('data:')
+      cleanRef.startsWith('data:') ||
+      cleanRef.startsWith('attachments/')
     ) {
       return match;
     }
     const target = resolveVaultFile(cleanRef);
     if (target) {
-      const zipPath = `attachments/${target.name}`;
-      collectedFiles.set(zipPath, target);
+      const zipPath = allocateZipPath(target);
       return `![${alt}](${zipPath})`;
     }
     return match;
@@ -396,13 +437,16 @@ async function buildMarkdownWorkspaceBundle(activeFile, vault, metadataCache = n
   normalizedMarkdown = normalizedMarkdown.replace(blockRegex, (match, engine, content) => {
     const updatedContent = content.replace(/%%\s*(?:src|file)=([^\s\n]+)/g, (dirMatch, ref) => {
       const cleanRef = ref.trim().replace(/^["']|["']$/g, '');
-      if (cleanRef.startsWith('http://') || cleanRef.startsWith('https://')) {
+      if (
+        cleanRef.startsWith('http://') ||
+        cleanRef.startsWith('https://') ||
+        cleanRef.startsWith('attachments/')
+      ) {
         return dirMatch;
       }
       const target = resolveVaultFile(cleanRef);
       if (target) {
-        const zipPath = `attachments/${target.name}`;
-        collectedFiles.set(zipPath, target);
+        const zipPath = allocateZipPath(target);
         return `%% src=${zipPath}`;
       }
       return dirMatch;

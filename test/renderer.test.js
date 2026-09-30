@@ -569,3 +569,83 @@ test('Compilador de PDF (compileMarkdownToPdf) - Sucesso com payload ZIP binári
   assert.ok(buffer);
   assert.strictEqual(buffer.byteLength, 4);
 });
+
+test('buildMarkdownWorkspaceBundle: desambigua nomes colidentes e normaliza wikilinks com underscores', async () => {
+  const noteContent = `# Artigo com Imagens e Underscores
+
+![[99_anexo/forest_plot_iniquidades_sc_2024.png]]
+![[foto.png|400]]
+![[foto.png|Legenda Detalhada]]
+![[pasta_b/foto.png]]
+`;
+
+  const fakeFiles = {
+    '99_anexo/forest_plot_iniquidades_sc_2024.png': Buffer.from('PNG_FOREST_PLOT'),
+    'pasta_a/foto.png': Buffer.from('PNG_FOTO_A'),
+    'pasta_b/foto.png': Buffer.from('PNG_FOTO_B')
+  };
+
+  const fakeVault = {
+    read: async () => noteContent,
+    readBinary: async (file) => fakeFiles[file.path],
+    getAbstractFileByPath: (p) => {
+      if (fakeFiles[p]) return { path: p, name: p.split('/').pop() };
+      return null;
+    }
+  };
+
+  const fakeMetadataCache = {
+    getFirstLinkpathDest: (linkpath) => {
+      if (
+        linkpath === '99_anexo/forest_plot_iniquidades_sc_2024.png' ||
+        linkpath === 'forest_plot_iniquidades_sc_2024.png'
+      ) {
+        return {
+          path: '99_anexo/forest_plot_iniquidades_sc_2024.png',
+          name: 'forest_plot_iniquidades_sc_2024.png'
+        };
+      }
+      if (linkpath === 'foto.png') {
+        return { path: 'pasta_a/foto.png', name: 'foto.png' };
+      }
+      if (linkpath === 'pasta_b/foto.png') {
+        return { path: 'pasta_b/foto.png', name: 'foto.png' };
+      }
+      return null;
+    }
+  };
+
+  const activeFile = { path: 'artigo.md', name: 'artigo.md' };
+  const zipBuffer = await buildMarkdownWorkspaceBundle(activeFile, fakeVault, fakeMetadataCache);
+  const zipString = zipBuffer.toString('latin1');
+
+  // Verifica que o anexo com underscores foi empacotado
+  assert.ok(zipString.includes('attachments/forest_plot_iniquidades_sc_2024.png'));
+  // Verifica que o primeiro foto.png ficou canônico
+  assert.ok(zipString.includes('attachments/foto.png'));
+  // Verifica que o segundo foto.png (de pasta_b) foi desambiguado para evitar colisão
+  assert.ok(zipString.includes('attachments/pasta_b_foto.png'));
+
+  // Extrai e verifica os arquivos no ZIP
+  const fs = require('node:fs');
+  const cp = require('node:child_process');
+  const os = require('node:os');
+  const path = require('node:path');
+
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'test_zip_'));
+  const tmpZip = path.join(tmpDir, 'test.zip');
+  fs.writeFileSync(tmpZip, zipBuffer);
+  cp.execSync(`unzip -q "${tmpZip}" -d "${tmpDir}"`);
+
+  assert.ok(fs.existsSync(path.join(tmpDir, 'attachments/forest_plot_iniquidades_sc_2024.png')));
+  assert.ok(fs.existsSync(path.join(tmpDir, 'attachments/foto.png')));
+  assert.ok(fs.existsSync(path.join(tmpDir, 'attachments/pasta_b_foto.png')));
+
+  const mainMd = fs.readFileSync(path.join(tmpDir, 'main.md'), 'utf8');
+  assert.ok(mainMd.includes('![](attachments/forest_plot_iniquidades_sc_2024.png)'));
+  assert.ok(mainMd.includes('![](attachments/foto.png){width=400pt}'));
+  assert.ok(mainMd.includes('![Legenda Detalhada](attachments/foto.png)'));
+  assert.ok(mainMd.includes('![](attachments/pasta_b_foto.png)'));
+
+  fs.rmSync(tmpDir, { recursive: true, force: true });
+});
