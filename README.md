@@ -183,6 +183,12 @@ Typst --> Médico: Retorna Artigo PDF
 ```
 ````
 
+### 7. Publicação Web no Fuxico (Shortlinks e Assets)
+
+Ao executar o comando **Joaju: Publicar Markdown no Fuxico**:
+- **Persistência de Shortlink:** O plugin armazena `fuxico_md: https://2lp.in/<slug>` no frontmatter da nota. Em republicações subsequentes da mesma nota, o shortlink existente é reutilizado e o documento é sobrescrito no mesmo endereço.
+- **Upload Automático de Assets:** Todas as imagens locais referenciadas no corpo da nota (via wikilinks `![[imagem.png]]` ou sintaxe padrão `![alt](imagem.png)`) são detectadas, desambiguadas e enviadas como anexos binários, sendo servidas na página sob `/<slug>/assets/<filename>`.
+
 ---
 
 ## 📋 Conformidade GOST
