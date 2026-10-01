@@ -211,7 +211,63 @@ let zlib;
 try {
   zlib = require('node:zlib');
 } catch {
-  zlib = null;
+  try {
+    zlib = require('zlib');
+  } catch {
+    zlib = null;
+  }
+}
+
+let Buffer;
+try {
+  Buffer = require('node:buffer').Buffer;
+} catch {
+  try {
+    Buffer = require('buffer').Buffer;
+  } catch {
+    Buffer = globalThis.Buffer;
+  }
+}
+
+if (!Buffer) {
+  const textEncoder = new TextEncoder();
+  Buffer = {
+    isBuffer(obj) {
+      return obj instanceof Uint8Array;
+    },
+    from(val, enc) {
+      if (typeof val === 'string') return textEncoder.encode(val);
+      if (val instanceof Uint8Array) return val;
+      if (val instanceof ArrayBuffer) return new Uint8Array(val);
+      if (ArrayBuffer.isView(val)) return new Uint8Array(val.buffer, val.byteOffset, val.byteLength);
+      if (Array.isArray(val)) return new Uint8Array(val);
+      return new Uint8Array(val || 0);
+    },
+    alloc(size) {
+      const arr = new Uint8Array(size);
+      arr.writeUInt32LE = function(value, offset) {
+        new DataView(this.buffer, this.byteOffset, this.byteLength).setUint32(offset, value, true);
+      };
+      arr.writeUInt16LE = function(value, offset) {
+        new DataView(this.buffer, this.byteOffset, this.byteLength).setUint16(offset, value, true);
+      };
+      arr.copy = function(target, targetStart = 0) {
+        target.set(this, targetStart);
+      };
+      return arr;
+    },
+    concat(list) {
+      let total = 0;
+      for (const item of list) total += item.length;
+      const res = new Uint8Array(total);
+      let offset = 0;
+      for (const item of list) {
+        res.set(item, offset);
+        offset += item.length;
+      }
+      return res;
+    }
+  };
 }
 
 function createCrc32Table() {
