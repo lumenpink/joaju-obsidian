@@ -649,3 +649,109 @@ test('buildMarkdownWorkspaceBundle: desambigua nomes colidentes e normaliza wiki
 
   fs.rmSync(tmpDir, { recursive: true, force: true });
 });
+
+test('extractSlugFromUrl: extrai slug de URLs completas ou valores isolados', () => {
+  const { extractSlugFromUrl } = require('../main.js');
+
+  assert.strictEqual(extractSlugFromUrl('https://2lp.in/fvwls'), 'fvwls');
+  assert.strictEqual(extractSlugFromUrl('https://2lp.in/ghyc8/'), 'ghyc8');
+  assert.strictEqual(extractSlugFromUrl('https://fuxico.example.com/meu-slug_123'), 'meu-slug_123');
+  assert.strictEqual(extractSlugFromUrl('slug_simples'), 'slug_simples');
+  assert.strictEqual(extractSlugFromUrl(''), null);
+  assert.strictEqual(extractSlugFromUrl(null), null);
+  assert.strictEqual(extractSlugFromUrl(undefined), null);
+});
+
+test('collectMarkdownAssets: localiza e extrai imagens por wikilinks e markdown padrao', async () => {
+  const { collectMarkdownAssets } = require('../main.js');
+
+  const noteContent = `
+# Artigo com Imagens
+![[forest_plot_iniquidades_sc_2024.png]]
+![[foto.png|400]]
+![Foto Externa](https://externo.com/foto.png)
+![Foto Padrão](pasta_b/foto.png)
+`;
+
+  const fakeFiles = {
+    '99_anexo/forest_plot_iniquidades_sc_2024.png': Buffer.from('DADOS_FOREST_PLOT'),
+    'pasta_a/foto.png': Buffer.from('DADOS_FOTO_A'),
+    'pasta_b/foto.png': Buffer.from('DADOS_FOTO_B')
+  };
+
+  const fakeVault = {
+    readBinary: async (file) => fakeFiles[file.path],
+    getAbstractFileByPath: (p) => {
+      if (fakeFiles[p]) return { path: p, name: p.split('/').pop() };
+      return null;
+    }
+  };
+
+  const fakeMetadataCache = {
+    getFirstLinkpathDest: (linkpath) => {
+      if (linkpath === 'forest_plot_iniquidades_sc_2024.png') {
+        return {
+          path: '99_anexo/forest_plot_iniquidades_sc_2024.png',
+          name: 'forest_plot_iniquidades_sc_2024.png'
+        };
+      }
+      if (linkpath === 'foto.png') {
+        return { path: 'pasta_a/foto.png', name: 'foto.png' };
+      }
+      return null;
+    }
+  };
+
+  const assets = await collectMarkdownAssets(
+    noteContent,
+    fakeVault,
+    fakeMetadataCache,
+    'artigo.md'
+  );
+  assert.strictEqual(assets.length, 3);
+  assert.strictEqual(assets[0].name, 'forest_plot_iniquidades_sc_2024.png');
+  assert.strictEqual(assets[0].data.toString(), 'DADOS_FOREST_PLOT');
+  assert.strictEqual(assets[1].name, 'foto.png');
+  assert.strictEqual(assets[2].name, 'foto_1.png'); // Desambiguação de nome
+});
+
+test('uploadToFuxico: envia custom_name e assets multipart', async () => {
+  const { uploadToFuxico } = require('../main.js');
+
+  let sentBody = null;
+  let sentHeaders = null;
+
+  const mockRequestUrl = async (opts) => {
+    sentHeaders = opts.headers;
+    sentBody = Buffer.from(opts.body).toString('utf8');
+    return {
+      status: 200,
+      text: 'https://2lp.in/meu_slug\n'
+    };
+  };
+
+  const url = await uploadToFuxico(
+    'https://2lp.in',
+    'meu_token',
+    'artigo.md',
+    '# Conteudo',
+    'text/markdown',
+    mockRequestUrl,
+    {
+      doc: true,
+      customName: 'meu_slug',
+      assets: [
+        {
+          name: 'grafico.png',
+          data: Buffer.from('BYTES_PNG_GRAFICO')
+        }
+      ]
+    }
+  );
+
+  assert.strictEqual(url, 'https://2lp.in/meu_slug');
+  assert.ok(sentHeaders['Content-Type'].startsWith('multipart/form-data; boundary='));
+  assert.ok(sentBody.includes('name="custom_name"\r\n\r\nmeu_slug'));
+  assert.ok(sentBody.includes('name="assets[]"; filename="grafico.png"'));
+  assert.ok(sentBody.includes('BYTES_PNG_GRAFICO'));
+});

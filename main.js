@@ -212,6 +212,7 @@ try {
   zlib = require('node:zlib');
 } catch {
   try {
+    // biome-ignore lint/style/useNodejsImportProtocol: fallback para ambientes sem suporte ao protocolo node:
     zlib = require('zlib');
   } catch {
     zlib = null;
@@ -223,6 +224,7 @@ try {
   Buffer = require('node:buffer').Buffer;
 } catch {
   try {
+    // biome-ignore lint/style/useNodejsImportProtocol: fallback para ambientes sem suporte ao protocolo node:
     Buffer = require('buffer').Buffer;
   } catch {
     Buffer = globalThis.Buffer;
@@ -239,19 +241,20 @@ if (!Buffer) {
       if (typeof val === 'string') return textEncoder.encode(val);
       if (val instanceof Uint8Array) return val;
       if (val instanceof ArrayBuffer) return new Uint8Array(val);
-      if (ArrayBuffer.isView(val)) return new Uint8Array(val.buffer, val.byteOffset, val.byteLength);
+      if (ArrayBuffer.isView(val))
+        return new Uint8Array(val.buffer, val.byteOffset, val.byteLength);
       if (Array.isArray(val)) return new Uint8Array(val);
       return new Uint8Array(val || 0);
     },
     alloc(size) {
       const arr = new Uint8Array(size);
-      arr.writeUInt32LE = function(value, offset) {
+      arr.writeUInt32LE = function (value, offset) {
         new DataView(this.buffer, this.byteOffset, this.byteLength).setUint32(offset, value, true);
       };
-      arr.writeUInt16LE = function(value, offset) {
+      arr.writeUInt16LE = function (value, offset) {
         new DataView(this.buffer, this.byteOffset, this.byteLength).setUint16(offset, value, true);
       };
-      arr.copy = function(target, targetStart = 0) {
+      arr.copy = function (target, targetStart = 0) {
         target.set(this, targetStart);
       };
       return arr;
@@ -718,6 +721,47 @@ async function uploadToFuxico(
     }
   }
 
+  if (uploadOptions.customName) {
+    parts.push(
+      encoder.encode(
+        `--${boundary}\r\nContent-Disposition: form-data; name="custom_name"\r\n\r\n${uploadOptions.customName}\r\n`
+      )
+    );
+  }
+
+  if (Array.isArray(uploadOptions.assets)) {
+    for (const asset of uploadOptions.assets) {
+      if (asset?.name) {
+        let assetBytes;
+        if (typeof asset.data === 'string') {
+          assetBytes = encoder.encode(asset.data);
+        } else if (asset.data instanceof Uint8Array) {
+          assetBytes = asset.data;
+        } else if (asset.data instanceof ArrayBuffer) {
+          assetBytes = new Uint8Array(asset.data);
+        } else if (ArrayBuffer.isView(asset.data)) {
+          assetBytes = new Uint8Array(
+            asset.data.buffer,
+            asset.data.byteOffset,
+            asset.data.byteLength
+          );
+        } else if (typeof Buffer !== 'undefined' && Buffer.isBuffer(asset.data)) {
+          assetBytes = new Uint8Array(asset.data);
+        } else {
+          assetBytes = new Uint8Array(0);
+        }
+
+        parts.push(
+          encoder.encode(
+            `--${boundary}\r\nContent-Disposition: form-data; name="assets[]"; filename="${asset.name}"\r\nContent-Type: application/octet-stream\r\n\r\n`
+          )
+        );
+        parts.push(assetBytes);
+        parts.push(encoder.encode('\r\n'));
+      }
+    }
+  }
+
   parts.push(
     encoder.encode(
       `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${filename}"\r\nContent-Type: ${mimeType}\r\n\r\n`
@@ -831,6 +875,116 @@ async function uploadToFuxico(
   }
 
   return publicUrl;
+}
+
+/**
+ * Extrai o slug do Fuxico a partir de uma URL completa ou slug isolado.
+ */
+function extractSlugFromUrl(urlOrSlug) {
+  if (!urlOrSlug || typeof urlOrSlug !== 'string') return null;
+  const clean = urlOrSlug.trim();
+  const match = clean.match(/\/([a-zA-Z0-9_-]+)(?:\/)?$/);
+  if (match) {
+    return match[1];
+  }
+  if (/^[a-zA-Z0-9_-]+$/.test(clean)) {
+    return clean;
+  }
+  return null;
+}
+
+/**
+ * Coleta todos os assets binários referenciados no documento Markdown (wikilinks e imagens padrão).
+ */
+async function collectMarkdownAssets(
+  rawContent,
+  vault = null,
+  metadataCache = null,
+  sourcePath = ''
+) {
+  if (!rawContent || typeof rawContent !== 'string') return [];
+  const assets = [];
+  const seenPaths = new Set();
+  const seenNames = new Set();
+
+  const resolveVaultFile = (ref) => {
+    if (!ref || ref.startsWith('http://') || ref.startsWith('https://') || ref.startsWith('data:'))
+      return null;
+    let target = null;
+    if (metadataCache && typeof metadataCache.getFirstLinkpathDest === 'function') {
+      target = metadataCache.getFirstLinkpathDest(ref, sourcePath || '');
+    }
+    if (!target && typeof vault?.getAbstractFileByPath === 'function') {
+      target = vault.getAbstractFileByPath(ref);
+    }
+    if (!target && typeof vault?.getFiles === 'function') {
+      const files = vault.getFiles();
+      target = files.find((f) => f.path === ref || f.name === ref || f.basename === ref);
+    }
+    return target;
+  };
+
+  const imageRefs = new Set();
+
+  // 1. Wikilinks de imagem: ![[imagem.png]] ou ![[pasta/imagem.png|100]]
+  const wikilinkRegex = /!\[\[(.*?)\]\]/g;
+  let match;
+  while ((match = wikilinkRegex.exec(rawContent)) !== null) {
+    const ref = match[1].split('|')[0].trim();
+    if (ref) imageRefs.add(ref);
+  }
+
+  // 2. Imagens Markdown padrão: ![alt](caminho/imagem.png)
+  const mdImageRegex = /!\[(.*?)\]\((.*?)\)/g;
+  while ((match = mdImageRegex.exec(rawContent)) !== null) {
+    const rawRef = match[2].trim().split(/\s+/)[0];
+    if (
+      rawRef &&
+      !rawRef.startsWith('http://') &&
+      !rawRef.startsWith('https://') &&
+      !rawRef.startsWith('data:')
+    ) {
+      imageRefs.add(rawRef);
+    }
+  }
+
+  for (const ref of imageRefs) {
+    const file = resolveVaultFile(ref);
+    if (file && !seenPaths.has(file.path || ref)) {
+      seenPaths.add(file.path || ref);
+      let assetData = null;
+      if (typeof vault?.readBinary === 'function') {
+        assetData = await vault.readBinary(file);
+      } else if (typeof vault?.read === 'function') {
+        assetData = await vault.read(file);
+      }
+
+      if (assetData) {
+        const rawName =
+          file.name ||
+          (file.basename ? `${file.basename}.${file.extension}` : ref.split('/').pop());
+        let finalName = rawName;
+        let counter = 1;
+        while (seenNames.has(finalName)) {
+          const dotIdx = rawName.lastIndexOf('.');
+          if (dotIdx !== -1) {
+            finalName = `${rawName.slice(0, dotIdx)}_${counter}${rawName.slice(dotIdx)}`;
+          } else {
+            finalName = `${rawName}_${counter}`;
+          }
+          counter++;
+        }
+        seenNames.add(finalName);
+
+        assets.push({
+          name: finalName,
+          data: assetData
+        });
+      }
+    }
+  }
+
+  return assets;
 }
 
 /**
@@ -2298,6 +2452,14 @@ class JoajuPlugin extends PluginBase {
         theme = 'acad';
       }
 
+      const customName = extractSlugFromUrl(fm?.fuxico_md);
+      const assets = await collectMarkdownAssets(
+        rawContent,
+        this.app?.vault,
+        this.app?.metadataCache,
+        activeFile.path
+      );
+
       const publicUrl = await uploadToFuxico(
         this.settings.fuxicoUrl,
         this.settings.fuxicoToken,
@@ -2305,7 +2467,7 @@ class JoajuPlugin extends PluginBase {
         content,
         'text/markdown; charset=utf-8',
         requestFn,
-        { doc: true, theme }
+        { doc: true, theme, customName, assets }
       );
 
       await this.updateNoteFrontmatter(activeFile, { mdUrl: publicUrl });
@@ -2579,3 +2741,5 @@ module.exports.resolveMarkdownExternalSources = resolveMarkdownExternalSources;
 module.exports.packZip = packZip;
 module.exports.calculateCrc32 = calculateCrc32;
 module.exports.buildMarkdownWorkspaceBundle = buildMarkdownWorkspaceBundle;
+module.exports.extractSlugFromUrl = extractSlugFromUrl;
+module.exports.collectMarkdownAssets = collectMarkdownAssets;
