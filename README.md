@@ -151,12 +151,15 @@ CC(=O)Nc1ccc(O)cc1
 
 ### 4. Tabelas Acadêmicas (`table`)
 
+Renderização em conformidade com as regras clássicas das três linhas (ABNT/IBGE/APA), com alto contraste garantido em tema escuro (`#111827`), escala compacta de células para prevenir rolagem horizontal e números com alinhamento tabular (`tabular-nums`):
+
 ````markdown
 ```table
 %% caption="Comparativo dos Parâmetros Clínicos"
 %% src=attachments/dados_clinicos.csv
 ```
 ````
+
 
 ### 5. Fluxograma Moderno (`d2`)
 
