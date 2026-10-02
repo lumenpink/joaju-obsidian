@@ -1,5 +1,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const {
   DEFAULT_SETTINGS,
   createDiagramCache,
@@ -754,4 +756,25 @@ test('uploadToFuxico: envia custom_name e assets multipart', async () => {
   assert.ok(sentBody.includes('name="custom_name"\r\n\r\nmeu_slug'));
   assert.ok(sentBody.includes('name="assets[]"; filename="grafico.png"'));
   assert.ok(sentBody.includes('BYTES_PNG_GRAFICO'));
+});
+
+test('Estilos de Tabelas Acadêmicas - Alto contraste em tema escuro e escala compacta', () => {
+  const css = fs.readFileSync(path.join(__dirname, '../styles.css'), 'utf8');
+
+  // 1. Contraste fixo independente do modo escuro
+  assert.ok(
+    css.includes('#111827'),
+    'styles.css deve conter tom escuro fixo #111827 para fontes e bordas'
+  );
+  assert.ok(css.includes('border-top: 2px solid #111827'));
+  assert.ok(css.includes('border-bottom: 2px solid #111827'));
+  assert.ok(css.includes('border-bottom: 1px solid #111827'));
+
+  // 2. Compactação de padding e tamanho de fonte para evitar scroll horizontal
+  assert.ok(css.includes('padding: 0.35rem 0.65rem'));
+  assert.ok(css.includes('font-size: 0.84rem'));
+  assert.ok(css.includes('font-variant-numeric: tabular-nums'));
+
+  // 3. Container especializado
+  assert.ok(css.includes('.joaju-diagram-container.joaju-table-container'));
 });

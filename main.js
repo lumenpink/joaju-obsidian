@@ -2571,7 +2571,10 @@ class JoajuPlugin extends PluginBase {
 
   renderSvgToElement(el, svgString) {
     el.empty();
-    const container = el.createDiv({ cls: 'joaju-diagram-container' });
+    const isTable = typeof svgString === 'string' && svgString.includes('joaju-academic-table');
+    const container = el.createDiv({
+      cls: isTable ? 'joaju-diagram-container joaju-table-container' : 'joaju-diagram-container'
+    });
     container.innerHTML = svgString;
   }
 
