@@ -7,7 +7,7 @@ on:
 
 jobs:
   test:
-    runs-on: native
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: GOST Compliance Audit
