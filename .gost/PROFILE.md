@@ -1,86 +1,111 @@
-# Perfil de Implementação: Ecossistema Lumen
-**Identificador do Perfil:** `lumen`  
-**Norma Base:** GOST `1.0.0-draft`  
-**Autor:** lumenpink  
-**Status:** Ativo / Produção
+# Perfil de Implementação GOST: Lilya
 
+```yaml
 ---
-
-## 1. Visão Geral
-
-Este documento define as especificações concretas, serviços de nuvem, ferramentas de automação e infraestrutura adotadas no ecossistema pessoal e profissional da Lumen para satisfazer todos os requisitos normativos do padrão **GOST**.
-
+id: lilya
+name: "Perfil de Implementação Lilya"
+extends: "https://kollontai.2lp.in/profile.md"
+target_gost: "2.0.0"
+maintainer: "Lumen Pink <hi@lumen.pink>"
+canonical_url: "https://lilya.2lp.in/profile.md"
+status: "Ativo / Produção"
 ---
-
-## 2. Forja de Código e Repositórios Remotos
-
-### 2.1 Forja Primária
-* **Instância:** [Codeberg](https://codeberg.org/) (Software Forgejo).
-* **Organização / Usuário:** `lumenpink`.
-* **URL do Repositório:** `https://codeberg.org/lumenpink/<nome-do-repo>`.
-* **Remote Git SSH Padrão:** `ssh://git@codeberg.org/lumenpink/<nome-do-repo>.git`.
-* **Branch Padrão:** `main`.
-
-### 2.2 Criação Automatizada via API
-A criação de repositórios remotos utiliza a API v1 do Codeberg autenticada via `$CODEBERG_TOKEN`:
-
-```bash
-curl -X POST \
-  -H "Authorization: token $CODEBERG_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "<nome-do-repo>",
-    "description": "<Descrição curta e objetiva do projeto>",
-    "private": false,
-    "auto_init": false
-  }' \
-  "https://codeberg.org/api/v1/user/repos"
 ```
 
+> **Sobre este Perfil:**  
+> O perfil **Lilya** (anteriormente denominado *Lumen*) é a especialização autoral, pessoal e de infraestrutura soberana do padrão **[GOST](https://gost.2lp.in)**.  
+> Ele estende diretamente o perfil base **[Kollontai](https://kollontai.2lp.in)** (`extends: https://kollontai.2lp.in/profile.md`), herdando a autoridade do Maestro **`cccp`**, a matriz de toolchains homologadas e os protocolos de distribuição, aplicando precedência estrita (*deep override*) para a forja soberana em `gambi.2lp.in`, publicação na borda (`*.2lp.in`), catálogo de binários (`banca.2lp.in`), afirmação identitária transfeminista no rodapé e entrega contínua nos servidores `obizero`, `obione` e `obitwo`.
+
 ---
 
-## 3. Gestão de Commits e Hooks (`cccp`)
+## 1. Identidade, Forja Soberana (`gambi.2lp.in`) e Espelhos
 
-O ecossistema Lumen utiliza a CLI **`cccp`** como ferramenta central de versionamento, hooks do Git e integridade semântica.
-
-### 3.1 Arquivo `.cccprc`
-Todo repositório no perfil Lumen **DEVE** conter na raiz o arquivo `.cccprc`:
+### 1.1 Parâmetros Canônicos do Maestro (`.cccprc`)
+No perfil Lilya, o Maestro `cccp` opera com os seguintes parâmetros canônicos de infraestrutura:
 
 ```ini
-codeberg_owner = lumenpink
-codeberg_repo = <nome-do-repo>
-agent_md_url = https://gist.githubusercontent.com/lumenpink/ebaded4f8bfb956346c28b64f48754fb/raw/c48a2f9cfb4fd73dcb944c4e47a5b17b8f3a3a2e/AGENTS.md
-agent_var_lang = english
+agent_var_lang = portuguese
+
+# Forja Primária Soberana (Forgejo em gambi.2lp.in)
+primary_forge_type = forgejo
+primary_forge_domain = gambi.2lp.in
+primary_owner = lumen
+primary_repo = <slug>
+primary_ssh_url = git@gambi.2lp.in:lumen/<slug>.git
+
+# Espelhos Passivos e Ingestão de Fronteira
+mirrors = codeberg,github
+mirror_owner = lumenpink
 ```
 
-### 3.2 Ativação e Bloqueios dos Hooks
-Após criar ou clonar o projeto, os hooks **DEVEM** ser inicializados via:
-```bash
-cccp install
-```
-Isso instala:
-* **`commit-msg`:**
-  - Validador rigoroso de Conventional Commits.
-  - **Enforcement de Tickets:** Rejeita qualquer commit que não contenha a referência explícita ao ticket da issue no padrão `(ref #<id>)` ou `(closes #<id>)`. Bloqueia commits sem ticket na raiz.
-* **`post-commit`:** Sincronizador atômico de versão (`VERSION`), atualização do `CHANGELOG.md` e metadados.
-* **`pre-push`:** Gate de CI local com `act` (ver Seção 5.6).
+### 1.2 Topologia de Repositórios e Push Mirrors Duplos
+1. **Forja Primária Soberana:** Hospedada em `https://gambi.2lp.in/lumen/<slug>` (acesso SSH via porta 22 padrão em `git@gambi.2lp.in:lumen/<slug>.git`).
+2. **Push Mirrors Automatizados (`sync_on_commit: true`):** A instância `gambi.2lp.in` replica imediatamente todo push recebido na branch `main` (e tags/branches persistentes) para dois espelhos externos de vitrine e preservação:
+   - **Espelho FOSS:** Codeberg (`https://codeberg.org/lumenpink/<slug>`)
+   - **Espelho Comunitário:** GitHub (`https://github.com/lumenpink/<slug>`)
+3. **Remotes Locais e Ingestão de PRs:**
+   - O desenvolvedor e os agentes de IA executam `cccp push` exclusivamente para o `origin` (`git@gambi.2lp.in:lumen/<slug>.git`).
+   - Os remotes `codeberg` e `github` são mantidos pelo `cccp` com `pushurl = no_push` e refspec `+refs/pull/*/head:refs/remotes/<remote>/pr/*` para ingestão segura na quarentena `inbox/*`.
+
+### 1.3 Allowlist Estrita de Rede na Esteira (`ci.yml`)
+Na auditoria da regra `GOST-10-CI-HERMETIC-SINGLE-FILE`, a esteira `.forgejo/workflows/ci.yml` nos runners do ecossistema Lilya **SÓ PODE** referenciar recursos e espelhos internos sob os domínios:
+* **`gambi.2lp.in`** (Actions espelhadas internamente ou relativas sem prefixo de servidor).
+* **`crates.2lp.in`** (Registry interno e espelho de pacotes).
+* **`banca.2lp.in`** (Despacho de artefatos compilados na fila `release`).
+* Chamadas a outros domínios de rede pública quebram o `cccp check --strict` imediatamente.
 
 ---
 
-## 4. Publicação Web e Documentação (`*.2lp.in`)
+## 2. Rodapé Canônico em Duas Linhas (Afirmação Identitária & Soberania)
 
-### 4.1 Infraestrutura: Cloudflare Workers
-A vitrine de documentação pública (`./site`) é publicada na borda da Cloudflare sob o domínio unificado `*.2lp.in`.
+O perfil Lilya preenche o template estrutural de rodapé herdado do perfil Kollontai com a afirmação identitária transfeminista sul-americana nas 10 línguas oficiais da norma GOST.
 
-### 4.2 Arquivo `wrangler.jsonc`
+### 2.1 Estrutura HTML Canônica
+Todo aplicativo com interface gráfica, TUI/CLI com rodapé formatado, vitrine pública ou documentação estática (`./site`) **DEVE** renderizar as duas linhas rigorosamente nesta estrutura:
+
+```html
+<footer class="footer">
+  <p>Orgulhosamente produzido por uma <a href="https://travesti.2lp.in/pt/" target="_blank" rel="noopener">travesti latina</a> 🏳️‍⚧️ :)</p>
+  <p>{title} v{version_full} • por <a href="https://lumen.pink" target="_blank" rel="noopener">Lumen Pink</a> • Brasil 🇧🇷 • <a href="LICENSE">{license_spdx}</a></p>
+</footer>
+```
+
+### 2.2 Regras Invioláveis de Renderização do Rodapé
+1. **Intraduzibilidade Política do Termo `travesti`:** O substantivo *travesti* permanece rigorosamente sem tradução nos 10 idiomas oficiais, preservando sua singularidade histórica e geopolítica latino-americana. O adjetivo concorda gramaticalmente com o idioma ativo e aponta para `https://travesti.2lp.in/<lang>/`.
+2. **Versão Short vs. Versão Long:**
+   - Cabeçalhos, títulos de janela e badges no topo da página exibem estritamente a **Versão Short** (`v{MAJOR}.{MINOR}.{PATCH}`, truncada antes do `+`).
+   - A Linha 2 do rodapé exibe obrigatoriamente a **Versão Long** (string integral do arquivo `VERSION`, incluindo metadados de build `+YYYYMMDD`, ex: `v0.1.0+20261026`).
+
+### 2.3 Matriz Oficial de Tradução do Rodapé (10 Línguas)
+
+| ISO | Linha 1 (Afirmação Identitária Transfeminista) | Linha 2 (Metadados de Soberania e Licença) |
+|:---:|---|---|
+| **`pt`** | Orgulhosamente produzido por uma [travesti latina](https://travesti.2lp.in/pt/) 🏳️‍⚧️ :) | {title} v{ver} • por [Lumen Pink](https://lumen.pink) • Brasil 🇧🇷 • [{lic}](LICENSE) |
+| **`en`** | Proudly produced by a [Latin American travesti](https://travesti.2lp.in/en/) 🏳️‍⚧️ :) | {title} v{ver} • by [Lumen Pink](https://lumen.pink) • Brazil 🇧🇷 • [{lic}](LICENSE) |
+| **`es`** | Orgullosamente producido por una [travesti latinoamericana](https://travesti.2lp.in/es/) 🏳️‍⚧️ :) | {title} v{ver} • por [Lumen Pink](https://lumen.pink) • Brasil 🇧🇷 • [{lic}](LICENSE) |
+| **`fr`** | Fièrement produit par une [travesti latino-américaine](https://travesti.2lp.in/fr/) 🏳️‍⚧️ :) | {title} v{ver} • par [Lumen Pink](https://lumen.pink) • Brésil 🇧🇷 • [{lic}](LICENSE) |
+| **`de`** | Mit Stolz entwickelt von einer [lateinamerikanischen Travesti](https://travesti.2lp.in/de/) 🏳️‍⚧️ :) | {title} v{ver} • von [Lumen Pink](https://lumen.pink) • Brasilien 🇧🇷 • [{lic}](LICENSE) |
+| **`it`** | Orgogliosamente prodotto da una [travesti latinoamericana](https://travesti.2lp.in/it/) 🏳️‍⚧️ :) | {title} v{ver} • da [Lumen Pink](https://lumen.pink) • Brasile 🇧🇷 • [{lic}](LICENSE) |
+| **`ru`** | С гордостью создано [латиноамериканской travesti](https://travesti.2lp.in/ru/) 🏳️‍⚧️ :) | {title} v{ver} • от [Lumen Pink](https://lumen.pink) • Бразилия 🇧🇷 • [{lic}](LICENSE) |
+| **`zh`** | 由一位[拉美 travesti](https://travesti.2lp.in/zh/) 自豪制作 🏳️‍⚧️ :) | {title} v{ver} • 来自 [Lumen Pink](https://lumen.pink) • 巴西 🇧🇷 • [{lic}](LICENSE) |
+| **`ja`** | [ラテンアメリカの travesti](https://travesti.2lp.in/ja/) によって誇りを持って制作されました 🏳️‍⚧️ :) | {title} v{ver} • 制作: [Lumen Pink](https://lumen.pink) • ブラジル 🇧🇷 • [{lic}](LICENSE) |
+| **`ar`** | صُنع بكل فخر بواسطة [travesti أمريكية لاتينية](https://travesti.2lp.in/ar/) 🏳️‍⚧️ :) | {title} v{ver} • بواسطة [Lumen Pink](https://lumen.pink) • البرازيل 🇧🇷 • [{lic}](LICENSE) |
+
+---
+
+## 3. Publicação Web na Borda (`*.2lp.in`) e Empacotamento Dioxus
+
+### 3.1 Hospedagem Estática via Cloudflare Workers (`wrangler.jsonc`)
+Toda vitrine pública (`./site`) é publicada sob o domínio `<slug>.2lp.in` através de `wrangler.jsonc` na raiz:
+
 ```jsonc
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "<nome-do-projeto>",
-  "compatibility_date": "2024-09-23",
+  "name": "<slug>",
+  "compatibility_date": "2026-01-01",
   "routes": [
     {
-      "pattern": "<nome-do-projeto>.2lp.in",
+      "pattern": "<slug>.2lp.in",
       "custom_domain": true
     }
   ],
@@ -90,547 +115,112 @@ A vitrine de documentação pública (`./site`) é publicada na borda da Cloudfl
 }
 ```
 
-### 4.3 Cabeçalhos de Segurança (`site/_headers`)
-```http
-/*
-  X-Content-Type-Options: nosniff
-  X-Frame-Options: DENY
-  Referrer-Policy: strict-origin-when-cross-origin
+* **Redundância Estática:** A fila `deploy` da esteira publica simultaneamente o snapshot em branch órfã stateless `pages` para o Codeberg Pages (`https://lumenpink.codeberg.page/<slug>/`).
+
+### 3.2 Identificador de Bundle Canônico (`Dioxus.toml`)
+Para aplicações gráficas e mobile construídas com Dioxus 0.8, o namespace reverso e o publisher são fixados como:
+
+```toml
+[application]
+name = "<slug>"
+default_platform = "web"
+
+[bundle]
+identifier = "in.2lp.<slug>"
+publisher = "Lumen Pink"
+icon = ["site/assets/icon.png"]
 ```
-
-### 4.4 Fallback: Codeberg Pages
-Como contingência e redundância estática, o pipeline de CI publica a pasta `./site` também no Codeberg Pages (`https://lumenpink.codeberg.page/<nome-do-repo>/`).
-
-### 4.5 Topologia de Serviços Dinâmicos no Perfil Lumen
-Para repositórios que implementam serviços web dinâmicos, daemons ou REPLs (como o Matraca):
-1. **Camada Privada Primária (Mesh VPN):**
-   - Acesso via **Tailscale** (`http://100.x.y.z:<porta>`).
-   - Todo tráfego entre smartphones, laptops e estações de desenvolvimento permanece criptografado ponto a ponto na rede WireGuard privada sem abertura de portas no firewall.
-2. **Camada de Borda Autenticada (Cloudflare Tunnel):**
-   - Quando for conveniente o acesso web com certificado SSL público sem a VPN ativa no cliente móvel, utiliza-se o **`cloudflared`** direcionando para o subdomínio `app.<repo>.2lp.in` com autenticação obrigatória no aplicativo.
 
 ---
 
-## 5. Stack e Ferramental Padrão de Testes
+## 4. Distribuição de Binários na Banca (`banca.2lp.in`)
 
-Para atender aos requisitos de alta cobertura (>90%, foco em 100%) e mutação da norma GOST, o ecossistema Lumen adota as seguintes ferramentas padronizadas por linguagem:
+A autoridade central de distribuição de executáveis e pacotes definida na Seção 4 do perfil Kollontai reside em **`https://banca.2lp.in`** (servida via Cloudflare R2):
 
-### 5.1 Shell Scripting / CLI de Sistema
-* **Runner de Testes:** **`shellspec`** (BDD framework para POSIX shell / bash).
-* **Estrutura:** Especificações organizadas sob `spec/` (ex: `spec/*_spec.sh`).
-* **Cobertura:** Mensuração via `kcov` integrada ao shellspec (`shellspec --kcov`).
-
-### 5.2 Rust (Sistemas, Milters, Daemons e CLI)
-* **Runner de Testes:** **`cargo test`** (testes unitários in-source em `src/` e testes de integração em `tests/`).
-* **Cobertura:** **`cargo-tarpaulin`** ou **`cargo-llvm-cov`** (com flag obrigatória de bloqueio `--fail-under 90`).
-* **Testes de Mutação:** **`cargo-mutants`** para detecção de testes ineficazes e mutantes sobreviventes.
-
-### 5.3 PHP (IndieWeb, APIs e Aplicações Web)
-* **Runner de Testes:** **`pest`** (PHP Testing Framework elegante e veloz).
-* **Cobertura:** Execução contínua com verificação estrita:
-  ```bash
-  vendor/bin/pest --coverage --min=90
+* **Vitrine Interativa:** `https://banca.2lp.in/downloads/#<slug>` (design brutalista/cyberpunk em Vanilla HTML/CSS/JS, sem frameworks pesados, com cópia rápida de comando `curl` e tabela de hashes SHA-256).
+* **Comando Universal de Instalação:**
+  ```sh
+  curl -sSf https://banca.2lp.in/downloads/<slug>/install.sh | sh
   ```
-* **Testes de Mutação:** **`infection`** (`vendor/bin/infection --min-msi=80`).
-
-### 5.4 Web, Interfaces e Ponta a Ponta (E2E)
-* **Runner E2E:** **`playwright`** (`npx playwright test`).
-* **Escopo:** Navegação automatizada *headless* em Chromium, Firefox e WebKit simulando as jornadas reais do usuário e garantindo ausência de erros de console, layout e renderização.
-
-### 5.5 Análise Estática, Formatação Determinística & Zero Warnings por Stack
-O ecossistema Lumen adota um pipeline estrito onde **erros de linter e desvios de formatação quebram o build**:
-
-* **Rust:**
-  - Linter: `cargo clippy --all-targets --all-features -- -D warnings`
-  - Formatação: `cargo fmt -- --check`
-  - Auditoria de Dependências: `cargo audit`
-* **PHP:**
-  - Análise Estática: `vendor/bin/phpstan analyse --level=max`
-  - Formatação: `vendor/bin/pint --test`
-  - Auditoria de Dependências: `composer audit`
-* **POSIX Shell:**
-  - Linter: `shellcheck` (zero avisos tolerados em todos os scripts)
-  - Formatação: `shfmt -d -i 2 -ci -bn .` (2 espaços, recuo de case, operadores no início)
-* **Web, JS/TS, JSON, YAML e Markdown:**
-  - Formatação e Linter: `biome check` ou `npx prettier --check "**/*.{json,yaml,md,js,ts,html,css}"`
-* **Higiene Universal de Editores:**
-  - Arquivo `.editorconfig` na raiz de todo repositório para impor LF, UTF-8, ausência de trailing whitespaces e indentação correta.
-
-### 5.6 Gate de Pre-Push com `act` (CI Local Idêntico)
-O ecossistema Lumen usa **`act`** — executor local de Forgejo/GitHub Actions baseado em Docker — para rodar o job `test` do pipeline em um ambiente **bit-for-bit idêntico** ao do Forgejo antes de cada `git push`.
-
-#### Ferramenta
-* **`act`** ([`nektos/act`](https://github.com/nektos/act)): lê `.forgejo/workflows/ci.yml` e executa os jobs dentro dos mesmos containers Docker usados pelo Forgejo Actions.
-* **Pré-requisito:** Docker em execução na máquina de desenvolvimento (sempre presente no ecossistema Lumen).
-
-#### Comportamento do Hook `pre-push`
-```
-git push
-  └─► pre-push hook (instalado por cccp install)
-        ├─ Verifica se act + Docker estão disponíveis
-        │    └─ Não disponíveis: emite aviso, NÃO bloqueia push
-        ├─ Executa: act -j test --no-pull
-        │    └─ Saída completa → .git/act-logs/<data>_<hora>_<branch>_<sha-curto>.log
-        ├─ Mostra: spinner vivo + step atual + tempo decorrido
-        └─ Exit 0: push prossegue  |  Exit 1: push abortado + resumo + path do log
-```
-
-#### Formato dos Logs
-```
-.git/act-logs/
-  2026-09-24_09-41_feat-42-rate-limit_a4b3c2d.log
-  2026-09-24_08-17_main_cd62fd5.log
-```
-* Diretório `.git/act-logs/` é automaticamente ignorado pelo git.
-* Consulta rápida ao log mais recente: `cccp act log`
-
-#### UX do Gate no Terminal
-```
-⠸ [pre-push] Running CI gate locally...
-  Job: test › cargo clippy -- -D warnings     [0:12]
-  Log: .git/act-logs/2026-09-24_09-41_feat-42_a4b3c2d.log
-```
-Sucesso:
-```
-✅ CI gate passed (1m 34s) — pushing to origin/main
-```
-Falha:
-```
-❌ CI gate failed (0m 47s) — push aborted
-   → Step failed: cargo test (3 failures)
-   → Log: .git/act-logs/2026-09-24_09-41_feat-42_a4b3c2d.log
-   → Bypass consciente: git push --no-verify
-```
-
-#### Bypass Explícito
-```bash
-git push --no-verify  # bypass consciente e documentado — não use por hábito
-```
+* **Endpoint de Auto-Update:** Os binários CLI consultam `https://banca.2lp.in/downloads/<slug>/<channel>-latest.version` e `index.json` para o protocolo XDG de atualização (`<slug> check-update` / `<slug> update`).
+* **Retenção de Artefatos:** Política estrita de retenção de 5 estáveis e 10 compilações noturnas no Cloudflare R2.
 
 ---
 
-## 6. Pipeline de CI/CD (`.forgejo/workflows/ci.yml`)
+## 5. Entrega Contínua de Servidores (CD em `obizero`, `obione` e `obitwo`)
 
-O workflow no Forgejo Actions declara **obrigatoriamente** jobs separados: `test` (roda também localmente via `act`) e `deploy-site` (exclusivo do Forgejo, após push):
+Para serviços conteinerizados autohospedados, o perfil Lilya opera com **Continuous Deployment (CD) Determinístico** disparado diretamente pela fila `deploy` da esteira em `gambi.2lp.in`, com banimento total do Watchtower.
 
-```yaml
-name: "CI / CD Pipeline"
+### 5.1 Padrão de Orquestração e Healthcheck Obrigatório
+Todos os serviços residem em `~/stacks/<slug>/compose.yaml` (estritamente com extensão `.yaml`, sendo banida a extensão `.yml`) e declaram probe ativa de saúde:
 
-on:
-  push:
-    branches: [main, develop]
-  pull_request:
-
-jobs:
-  test:
-    name: "Run Test Suite & Enforce Coverage (>90%)"
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      # Passos da stack (ex: pest --coverage --min=90, cargo llvm-cov --fail-under 90, etc.)
-
-  deploy-site:
-    name: "Deploy Documentation Site"
-    runs-on: ubuntu-latest
-    needs: [test]
-    if: github.ref == 'refs/heads/main'
-    steps:
-      - uses: actions/checkout@v4
-      - name: "Deploy to Cloudflare Workers"
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: |
-          if [ -n "$CLOUDFLARE_API_TOKEN" ]; then
-            npx wrangler deploy
-          fi
-      - name: "Deploy to Codeberg Pages (Fallback)"
-        uses: https://codeberg.org/actions/pages@v1
-        with:
-          path: site
-```
-
----
-
-## 7. Registro no Catálogo Central (`~/src/catalog.json`)
-
-Todo repositório sob o perfil Lumen deve ser registrado no arquivo central de descoberta `~/src/catalog.json`:
-
-```json
-{
-  "name": "<nome-do-projeto>",
-  "forge": "codeberg",
-  "slug": "lumenpink/<nome-do-projeto>",
-  "description": "<Descrição objetiva em uma linha>",
-  "topics": ["palavra-chave-1", "palavra-chave-2"],
-  "license": "CC0-1.0",
-  "website": "https://<nome-do-projeto>.2lp.in",
-  "is_upstream": false
-}
-```
-
-Isso garante indexação pelo `cccp catalog`, ferramentas de busca local e dashboards do ecossistema.
-
----
-
-## 8. Mapeamento do Ciclo DD-TDD no Perfil Lumen
-
-No dia a dia do ecossistema Lumen, o ciclo DD-TDD opera integrado ao Codeberg Issues, branches dedicados e ao CLI `cccp`:
-
-### 8.1 Passo a Passo Operacional:
-1. **Abertura do Ticket:**
-   - Criado via interface do Codeberg ou via CLI:
-     ```bash
-     tea issue create --title "Rate limiting no endpoint de autenticação"
-     # Issue #42 criada
-     ```
-2. **Criação do Branch Dedicado:**
-   - Nunca commitar na `main`:
-     ```bash
-     git checkout -b feat/42-rate-limit
-     ```
-3. **Doc in develop (Commit):**
-   - Documentação prévia dos contratos e schemas:
-     ```bash
-     git commit -m "docs(auth): document rate limit headers and error payloads (ref #42)"
-     ```
-4. **Failing Test (Commit):**
-   - Teste automatizado que falha comprovando a ausência da proteção:
-     ```bash
-     git commit -m "test(auth): add failing integration test for 61st request (ref #42)"
-     ```
-5. **Fix / Code (Commit):**
-   - Código que faz o teste passar com linter limpo (Zero Warnings):
-     ```bash
-     git commit -m "feat(auth): implement token bucket rate limiter (ref #42)"
-     ```
-6. **Finish Docs & Close (Commit):**
-   - Atualização da documentação no `./site`, `CHANGELOG.md` e fechamento formal:
-     ```bash
-     git commit -m "docs(auth): update security guide and finalize tickets (closes #42)"
-     ```
-
-### 8.2 Gestão de Releases e Publicação Semântica
-Quando um conjunto de tickets/milestones atinge maturidade:
-```bash
-cccp release minor   # ou patch / major
-git push --tags origin main
-```
-Isso consolida o `CHANGELOG.md`, atualiza `VERSION` para versão estável e cria a tag Git correspondente.
-
-### 8.3 Comandos Operacionais para Agentes de IA no Perfil Lumen
-No dia a dia com agentes de IA (assistentes CLI/IDE), o perfil Lumen adota o protocolo canônico de comandos curtos:
-* **`DCPD` (Do, Commit, Push, Deploy):** Autorização expressa para implementação da demanda, validação local com testes e Zero Warnings, commit no padrão Conventional Commits com fechamento de issue (`closes #ID`), push da branch do ticket, merge na branch principal (`main`) e push remoto disparando o deploy contínuo no Cloudflare Workers e Codeberg Pages.
-* **`DCP` (Do, Commit, Push):** Implementação, testes locais e push restritos à branch de trabalho (`feat/<id>-*`), gerando a URL do Pull Request no Codeberg para revisão humana prévia.
-* **`PLAN` (Plan & Propose):** Pesquisa e diagnóstico aprofundado sem qualquer alteração em arquivos de código nem commits.
-* **`TDD` (Ticket, Doc, Test, Do):** Execução estrita das 5 etapas do ciclo GOST com commits separados para documentação (`docs: ... ref #ID`), teste quebrado (`test: ... ref #ID`) e código funcional.
-* **`AUDIT` (Audit & Check):** Auditoria técnica passiva rodando linters no máximo (`-D warnings`), cobertura (`llvm-cov` / `pest --coverage`), testes de mutação (`cargo-mutants` / `infection`) e `composer/cargo audit`.
-* **`FIX` (Fix & Clean):** Saneamento direcionado para eliminar alertas de análise estática e corrigir formatação com `cargo fmt`, `pint` ou `shfmt`.
-* **`RELEASE` (Release & Tag):** Execução automatizada de `cccp release <patch|minor|major>` e sincronização com tags remotas.
-
----
-
-## 9. Internacionalização no Perfil Lumen
-
-O ecossistema Lumen adota o padrão de arquitetura multilíngue validado no `indieinabox` com governança de idioma centralizada pelo `cccp`:
-
-### 9.1 Configuração da Língua Primária (`.cccprc`)
-A autoridade canônica do idioma padrão de cada repositório é configurada no `.cccprc`:
-```ini
-agent_var_lang = english   # ou portuguese, etc.
-```
-- Serve de baseline para o ciclo DD-TDD e triagem de tickets via `diva`.
-- Define o idioma de fallback automático do aplicativo caso alguma chave de tradução em outro idioma não esteja presente.
-
-### 9.2 Paridade das 10 Línguas no Aplicativo (`resources/locales/` ou `locales/`)
-Todo software deve manter dicionários estruturados para as 10 línguas oficiais:
-`en.json`, `pt-BR.json`, `es.json`, `fr.json`, `de.json`, `it.json`, `ru.json`, `zh.json`, `ja.json`, `ar.json`.
-A suíte de testes de integração (ex: Pest, Cargo, ShellSpec) deve validar a paridade de 100% de chaves em relação ao arquivo de baseline.
-
-### 9.3 Roteador Estático Cliente (`site/index.html`)
-Na raiz de documentação `./site/index.html`, inclui-se o script de redirecionamento automático com detecção e persistência:
-```html
-<script>
-    (function() {
-        var supported = ['en', 'pt', 'es', 'fr', 'de', 'it', 'ru', 'zh', 'ja', 'ar'];
-        var saved = localStorage.getItem('doc_lang');
-        if (saved && supported.indexOf(saved) !== -1) {
-            window.location.replace(saved + '/');
-            return;
-        }
-        var navLang = (navigator.language || navigator.userLanguage || 'en').toLowerCase().substring(0, 2);
-        if (supported.indexOf(navLang) !== -1) {
-            window.location.replace(navLang + '/');
-        } else {
-            window.location.replace('en/');
-        }
-    })();
-</script>
-```
-
-### 9.4 Suporte Obrigatório a RTL para o Árabe (`site/ar/`)
-As páginas sob `site/ar/` e as interfaces da aplicação utilizam:
-```html
-<html lang="ar" dir="rtl">
-```
-
----
-
-## 10. Banners e Cards Sociais (Padrão KokoroSim)
-
-Todo repositório Lumen que publique site estático deve manter a automação para geração do banner Open Graph em `./site/assets/og_preview.png`.
-
-### 10.1 Script de Geração (`scripts/generate_og_image.py`)
-Utiliza Python + Pillow para renderizar o banner em 1200x630 com Safe Zone 4:3 centralizada (largura de 720px a 840px), evitando cortes em pré-visualizações móveis e do WhatsApp:
-- **Resolução:** 1200x630 px
-- **Safe Zone:** Miolo central com sangria lateral mínima de 180px.
-- **Tipografia:** Fonte condensada geométrica para títulos de alto impacto.
-
-### 10.2 Preview de Cards (`site/card_preview.html`)
-Para validação visual fiel antes do deploy, recomenda-se incluir em `site/card_preview.html` a simulação de renderização em WhatsApp (Dark Mode) e Twitter/X (Summary Large Image), conforme arquitetura do KokoroSim.
-
----
-
-## 11. Arquitetura Pragmática & Estrutura de Código no Perfil Lumen
-
-O perfil Lumen materializa os princípios de Inversão de Dependência (DIP), hermeticidade e anti-bloat através de padrões objetivos adaptados às linguagens centrais do ecossistema (**Rust** e **PHP**).
-
-### 11.1 Regra de Gradação: Micro-ferramenta vs. Aplicação
-1. **Micro-ferramentas e Scripts Utilitários:** Ferramentas de escopo pontual (ex: CLI de 100 linhas ou filtro de texto) **NÃO DEVEM** ser fracionadas em múltiplas pastas cerimoniais. Ficam contidas diretamente em `src/main.rs` (Rust) ou arquivo executável único (PHP/Bash).
-2. **Aplicações e Serviços:** Projetos que envolvam persistência, múltiplos protocolos ou casos de uso complexos **DEVEM** adotar a divisão canônica entre Domínio e Adaptadores.
-
-### 11.2 Padrão de Diretórios para Rust
-Em sistemas, daemons e milters:
-
-```text
-src/
-├── domain/             # Regras de negócio puras (sem dependências de I/O)
-│   ├── mod.rs
-│   ├── entity.rs       # Modelos e invariantes de domínio
-│   ├── status.rs       # Enums nativos para máquinas de estado
-│   └── ports.rs        # Traits de I/O (Output Ports: ex: MessageStore, ClientApi)
-├── application/        # Orquestração e Casos de Uso
-│   ├── mod.rs
-│   └── use_cases.rs    # Lógica que opera sobre os traits de domínio
-├── adapters/           # Implementações de I/O e interfaces de transporte
-│   ├── mod.rs
-│   ├── in_memory.rs    # Fake em memória para testes unitários herméticos
-│   ├── sqlite.rs       # Adaptador real de persistência
-│   └── cli.rs          # Entrada via linha de comando (ex: clap)
-└── main.rs             # Composition Root: instancia adaptadores e orquestra o bootstrap
-```
-
-#### Exemplo Canônico de Fake em Memória (Rust):
-```rust
-// src/domain/ports.rs
-pub trait MessageStore {
-    fn save(&mut self, id: &str, content: &str) -> Result<(), String>;
-    fn find(&self, id: &str) -> Option<String>;
-}
-
-// src/adapters/in_memory.rs
-use std::collections::HashMap;
-use crate::domain::ports::MessageStore;
-
-#[derive(Default)]
-pub struct InMemoryMessageStore {
-    items: HashMap<String, String>,
-}
-
-impl MessageStore for InMemoryMessageStore {
-    fn save(&mut self, id: &str, content: &str) -> Result<(), String> {
-        self.items.insert(id.to_string(), content.to_string());
-        Ok(())
-    }
-    fn find(&self, id: &str) -> Option<String> {
-        self.items.get(id).cloned()
-    }
-}
-```
-*Zero mocks dinâmicos:* Os testes unitários do caso de uso instanciam `InMemoryMessageStore` diretamente, rodando em microssegundos sem rede nem arquivos.
-
-### 11.3 Padrão de Diretórios para PHP
-Em APIs, aplicações IndieWeb e serviços web:
-
-```text
-src/
-├── Domain/             # Núcleo de domínio (PHP puro, zero dependências externas)
-│   ├── Models/         # Entidades de negócio
-│   ├── Enums/          # Backed Enums nativos (estados e categorias)
-│   └── Ports/          # Contratos e Interfaces (Input/Output Ports)
-├── Application/        # Casos de uso e orquestração
-│   └── UseCases/       # Handlers executando fluxos de domínio
-└── Infrastructure/     # Adaptadores concretos
-    ├── Persistence/    # Implementações reais (SQLite/Pdo) e In-Memory Fakes
-    ├── Http/           # Controllers e Middlewares
-    └── Console/        # Comandos CLI
-tests/
-├── Unit/               # Testes herméticos usando In-Memory Fakes (milissegundos)
-└── Integration/        # Testes com fixtures de banco SQLite em arquivo temporário
-```
-
-#### Exemplo Canônico de Fake em Memória e Pest (PHP):
-```php
-// src/Domain/Ports/TokenStorageInterface.php
-namespace App\Domain\Ports;
-
-interface TokenStorageInterface {
-    public function store(string $token, string $userId): void;
-    public function find(string $token): ?string;
-}
-
-// src/Infrastructure/Persistence/InMemoryTokenStorage.php
-namespace App\Infrastructure\Persistence;
-
-use App\Domain\Ports\TokenStorageInterface;
-
-final class InMemoryTokenStorage implements TokenStorageInterface {
-    /** @var array<string, string> */
-    private array $tokens = [];
-
-    public function store(string $token, string $userId): void {
-        $this->tokens[$token] = $userId;
-    }
-
-    public function find(string $token): ?string {
-        return $this->tokens[$token] ?? null;
-    }
-}
-```
-No teste Pest (`tests/Unit/AuthenticateUserTest.php`):
-```php
-test('autentica usuário com storage em memória', function () {
-    $storage = new \App\Infrastructure\Persistence\InMemoryTokenStorage();
-    $storage->store('tok-123', 'usr-456');
-
-    expect($storage->find('tok-123'))->toBe('usr-456')
-        ->and($storage->find('inexistente'))->toBeNull();
-});
-```
-
-### 11.4 Filosofia Anti-Bloat: Tipos Primitivos & Validação na Borda
-* **Parse, Don't Validate na Entrada:** A validação e desinfecção de strings, limites numéricos e decodificação JSON ocorrem no adaptador de entrada (ex: validação de request HTTP ou parser do CLI).
-* **Primitivos Confiáveis no Domínio:** Evita-se criar Value Objects cerimoniais (ex: `UsernameString`, `IdInt`) quando tipos primitivos nativos (`string`, `int`) com tipagem estrita da linguagem atendem com clareza.
-* **Modelagem com Enums Nativos:**
-  - Rust: `pub enum TaskState { Pending, Running, Finished { exit_code: i32 } }`
-  - PHP: `enum OrderStatus: string { case Pending = 'pending'; case Approved = 'approved'; case Cancelled = 'cancelled'; }`
-
----
-
-## 12. Padrões de Sistema e Containers no Perfil Lumen
-
-O ecossistema Lumen adota padrões rígidos de interoperabilidade Unix, priorizando ferramentas leves e compatíveis com shell scripting e ambientes conteinerizados seguros.
-
-### 12.1 Resolução Canônica de Diretórios XDG
-Todo utilitário ou serviço Lumen implementa o mapeamento estrito da especificação XDG com fallbacks universais.
-
-#### Em Shell Scripting (POSIX):
-```sh
-APP_NAME="meu-app"
-CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/$APP_NAME"
-DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/$APP_NAME"
-STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/$APP_NAME"
-CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/$APP_NAME"
-RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/$APP_NAME"
-
-mkdir -p "$CONFIG_DIR" "$DATA_DIR" "$STATE_DIR" "$CACHE_DIR" 2>/dev/null
-```
-
-#### Em Rust:
-```rust
-pub fn config_path(app: &str) -> std::path::PathBuf {
-    let base = std::env::var("XDG_CONFIG_HOME")
-        .map(std::path::PathBuf::from)
-        .unwrap_or_else(|_| {
-            let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
-            std::path::PathBuf::from(home).join(".config")
-        });
-    base.join(app)
-}
-```
-
-### 12.2 Configuração Plana Baseada em Shell e Env (`KEY=VALOR`)
-Para eliminar dependências pesadas de parsing (como bibliotecas TOML/YAML) em scripts de automação, os arquivos de configuração locais e de usuário adotam formato plano compatível com shell:
-
-```bash
-# $XDG_CONFIG_HOME/meu-app/config.env
-MATRACA_PORT="8080"
-MATRACA_BIND="127.0.0.1"
-MATRACA_LOG_LEVEL="info"
-```
-
-#### Carregamento Nativo em Shell:
-```sh
-if [ -f "$CONFIG_FILE" ]; then
-    set -a
-    # shellcheck source=/dev/null
-    . "$CONFIG_FILE"
-    set +a
-fi
-```
-
-### 12.3 Dockerfiles Canônicos no Perfil Lumen
-
-#### Template Rust (Multi-stage + `scratch` estático):
-```dockerfile
-# Estágio de compilação
-FROM rust:1.80-alpine3.20 AS builder
-RUN apk add --no-cache musl-dev
-WORKDIR /build
-COPY Cargo.toml Cargo.lock ./
-COPY src ./src
-RUN cargo build --release --target x86_64-unknown-linux-musl
-
-# Imagem final de produção (Zero Inchaço)
-FROM scratch
-USER 1000:1000
-COPY --from=builder /build/target/x86_64-unknown-linux-musl/release/app /usr/local/bin/app
-ENTRYPOINT ["/usr/local/bin/app"]
-```
-
-#### Template PHP (Multi-stage + `alpine` com Non-root):
-```dockerfile
-# Estágio de dependências
-FROM composer:2 AS vendor
-WORKDIR /app
-COPY composer.json composer.lock ./
-RUN composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader
-
-# Imagem final de execução
-FROM php:8.3-cli-alpine
-RUN adduser -D -u 1000 appuser
-WORKDIR /app
-COPY --chown=appuser:appuser . /app
-COPY --chown=appuser:appuser --from=vendor /app/vendor /app/vendor
-USER 1000:1000
-ENTRYPOINT ["php", "/app/bin/console"]
-```
-
-### 12.4 Higiene de Containers (`.dockerignore` e `compose.yaml`)
-Todo repositório com suporte a Docker **DEVE** incluir `.dockerignore` rigoroso na raiz:
-```dockerignore
-.git
-.env*
-!*.example
-target/
-vendor/
-tests/
-site/
-*.log
-```
-
-E para orquestração de desenvolvimento local, adotar `compose.yaml`:
 ```yaml
 services:
   app:
-    build: .
+    image: lumenpink/<slug>:${APP_VERSION:-latest}
     user: "1000:1000"
-    env_file:
-      - .env
-    ports:
-      - "${APP_PORT:-8080}:8080"
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:<port>/healthz || exit 1"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
 ```
 
+### 5.2 Topologia de Deploy por Nó de Infraestrutura
 
+#### 1. Nó Central de Execução (`obizero` — Deploy Local via Socket)
+* O `forgejo-runner` executa no host `obizero` com o socket Docker montado.
+* A imagem recém-compilada na fila `build` já reside no daemon local (`lumenpink/<slug>:<version>`).
+* O deploy ocorre sem tráfego externo redundante:
+  ```sh
+  docker compose -f /home/lumen/stacks/<slug>/compose.yaml up -d --no-build <slug>
+  ```
+* **Verificação Síncrona de Saúde e Rollback Automático (15s):**
+  A esteira monitora o status do container por até 15 segundos. Caso o estado não atinja `healthy` (ou `running` estável), a esteira captura `docker logs --tail 50 <slug>`, reverte imediatamente para a tag estável anterior, executa `docker image prune -f` e falha o pipeline com código não-zero.
 
+#### 2. Nós de Borda Remotos (`obione` e `obitwo` — Deploy via Mesh VPN Tailscale)
+* Para serviços distribuídos nos nós de borda (acessíveis via rede privada WireGuard/Tailscale ou expostos via Cloudflare Tunnel `cloudflared` em `app.<slug>.2lp.in`):
+* A esteira publica a imagem e aciona a atualização remotamente via SSH sobre a malha Tailscale:
+  ```sh
+  ssh -o StrictHostKeyChecking=accept-new lumen@<no-tailscale> \
+    "docker compose -f ~/stacks/<slug>/compose.yaml pull && \
+     docker compose -f ~/stacks/<slug>/compose.yaml up -d && \
+     docker image prune -f"
+  ```
+
+---
+
+## 6. Sobreposição de Regras de Conformidade (`lilya_rules.json`)
+
+Quando o `cccp sync` compila as regras para um repositório sob o perfil Lilya, as seguintes parametrizações específicas sobrepõem (*deep merge*) o `rules.json` base da GOST:
+
+```json
+{
+  "extends": "GOST-2.0.0",
+  "profile": "lilya",
+  "rules_override": [
+    {
+      "id": "GOST-09-SITE-SECURITY-HEADERS",
+      "require_footer_links": [
+        "https://travesti.2lp.in/",
+        "https://lumen.pink"
+      ]
+    },
+    {
+      "id": "GOST-10-CI-HERMETIC-SINGLE-FILE",
+      "allowed_uses_domains": ["gambi.2lp.in"],
+      "allowed_run_domains": ["gambi.2lp.in", "crates.2lp.in", "banca.2lp.in"]
+    },
+    {
+      "id": "GOST-25-REMOTES-AND-INBOX-QUARANTINE",
+      "required_origin_pattern": "^git@gambi\\.2lp\\.in:lumen/[a-z0-9-]+\\.git$",
+      "required_mirrors": {
+        "codeberg": "https://codeberg.org/lumenpink/<slug>.git",
+        "github": "https://github.com/lumenpink/<slug>.git"
+      }
+    }
+  ]
+}
+```
