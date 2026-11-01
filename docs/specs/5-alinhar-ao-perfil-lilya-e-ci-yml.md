@@ -12,3 +12,9 @@ Alinhamento do repositório `joaju-obsidian` às normas GOST v2.0 com perfil `li
 ## 3. Critérios de Aceitação
 - Testes unitários (`npm test`) 100% verdes.
 - 100% de conformidade com `cccp check --strict`.
+
+
+## 4. Conclusão da Fase 9
+- Workflow renomeado para `.forgejo/workflows/ci.yml`.
+- README.md condensado para 38 linhas (docs em docs/ARCHITECTURE.md).
+- Perfil GOST alinhado para Lilya e conformidade 100%.
